@@ -107,7 +107,6 @@ public class Crobot {
             } else {
                 log.error("Captcha response result is null!!");
             }
-
             log.debug("Captcha result: " + captchaResponseDTO.getResult());
         } else {
             log.error("Error while calling captcha service.");
@@ -174,9 +173,15 @@ public class Crobot {
 
         String path = System.getProperty("user.dir") + "/captcha.png";
         if (solvedCaptcha == null) {
-            File captchaSrc = driver.findElement(By.id("aramaForm:cptImg")).getScreenshotAs(OutputType.FILE);
-            FileHandler.copy(captchaSrc, new File(path));
-            solvedCaptcha = solveCaptcha(path);
+            for (int i = 0; i < 100; i++) {
+                File captchaSrc = driver.findElement(By.id("aramaForm:cptImg")).getScreenshotAs(OutputType.FILE);
+                FileHandler.copy(captchaSrc, new File(path));
+                solvedCaptcha = solveCaptcha(path);
+                if (solvedCaptcha != null)
+                    break;
+                log.error("Captcha did no solved. Waiting 10 seconds..");
+                TimeUnit.SECONDS.sleep(10);
+            }
         }
 
         if (firstRun) {
@@ -263,9 +268,15 @@ public class Crobot {
 
         boolean isCaptchaError = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Güvenlik Kodunu Kontrol Ediniz!");
         if (isCaptchaError) {
-            File captchaSrc = driver.findElement(By.id("aramaForm:cptImg")).getScreenshotAs(OutputType.FILE);
-            FileHandler.copy(captchaSrc, new File(path));
-            solvedCaptcha = solveCaptcha(path);
+            for (int i = 0; i < 100; i++) {
+                File captchaSrc = driver.findElement(By.id("aramaForm:cptImg")).getScreenshotAs(OutputType.FILE);
+                FileHandler.copy(captchaSrc, new File(path));
+                solvedCaptcha = solveCaptcha(path);
+                if (solvedCaptcha != null)
+                    break;
+                log.error("Captcha did no solved. Waiting 10 seconds..");
+                TimeUnit.SECONDS.sleep(10);
+            }
 
             WebElement guvenlikKodu = driver.findElement(By.cssSelector("#aramaForm\\:guvenlikKodu"));
             guvenlikKodu.clear();
