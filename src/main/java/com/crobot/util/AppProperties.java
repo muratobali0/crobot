@@ -3,7 +3,10 @@ package com.crobot.util;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class AppProperties {
@@ -31,12 +34,43 @@ public class AppProperties {
     }
 
     /**
-     * Returns value of teh property.
+     * Returns String value of the property.
      *
      * @param property
      * @return
      */
     public String getProperty(String property) {
         return properties.getProperty(property);
+    }
+
+    /**
+     * Returns int value of the property
+     *
+     * @param property
+     * @return
+     */
+    public int getPropertyAsInt(String property) {
+        return Integer.parseInt(properties.getProperty(property));
+    }
+
+    /**
+     * Converts property and returns list of integers
+     *
+     * @param property
+     * @return
+     */
+    public List<Integer> getPropertyAsIntegerList(String property) {
+        List<String> strings = Arrays.asList(properties.getProperty(property).split(","));
+        List<Integer> list = strings.stream().map(i -> Integer.parseInt(i.trim())).collect(Collectors.toList());
+        return list;
+    }
+
+    /**
+     *
+     * @param property
+     * @return
+     */
+    public List<String> getPropertyAsStringList(String property) {
+        return Arrays.asList(properties.getProperty(property).split(","));
     }
 }
