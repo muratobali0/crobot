@@ -73,4 +73,16 @@ public class AppProperties {
     public List<String> getPropertyAsStringList(String property) {
         return Arrays.asList(properties.getProperty(property).split(","));
     }
+
+    /**
+     * @return
+     */
+    public String getLookAndFeel() {
+        String lookAndFeel = properties.getProperty("application.look_and_feel");
+        if (lookAndFeel.equalsIgnoreCase("windows")) {
+            return "com.jgoodies.looks.windows.WindowsLookAndFeel";
+        } else {
+            return "com.jgoodies.looks.plastic.PlasticLookAndFeel";
+        }
+    }
 }
