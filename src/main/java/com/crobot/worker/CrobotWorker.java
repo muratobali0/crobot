@@ -148,13 +148,14 @@ public class CrobotWorker {
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "application/json");
         headers.put("Authorization", "Basic " + authStringEnc);
-        ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpGet(settingUrl, headers, RequestConfig.DEFAULT, 1, 1);
 
+        ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpGet(settingUrl, headers, RequestConfig.DEFAULT, 1, 1);
         if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
             Gson gson = new Gson();
             result = gson.fromJson(responseContent.getContent(), SettingDTO.class);
         } else {
             log.error("Error while getting settings!");
+            log.error(responseContent == null ? "ResponseContent is null!" : responseContent.toString());
         }
         return result;
     }
@@ -173,12 +174,12 @@ public class CrobotWorker {
         headers.put("Authorization", "Basic " + authStringEnc);
 
         ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpGet(poolUrl, headers, RequestConfig.DEFAULT, 1, 1);
-
         if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
             Gson gson = new Gson();
             result = gson.fromJson(responseContent.getContent(), SettingPoolDTO.class);
         } else {
-            log.error("Error while getting settings!");
+            log.error("Error while fetching from pool!");
+            log.error(responseContent == null ? "ResponseContent is null!" : responseContent.toString());
         }
         return result;
     }
@@ -191,16 +192,16 @@ public class CrobotWorker {
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "application/json");
         headers.put("Authorization", "Basic " + authStringEnc);
+        headers.put("Content-type", "application/json");
 
         Gson gson = new Gson();
         String jsonSettingPoolDTO = gson.toJson(settingPoolDTO);
         ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpPost(poolUrl, jsonSettingPoolDTO, headers, RequestConfig.DEFAULT, 1, 1);
-
         if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
             log.info("Setting Pool updated.");
-
         } else {
-            log.error("Error while getting settings!");
+            log.error("Error while updating setting pool!");
+            log.error(responseContent == null ? "ResponseContent is null!" : responseContent.toString());
         }
     }
 
@@ -212,16 +213,17 @@ public class CrobotWorker {
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "application/json");
         headers.put("Authorization", "Basic " + authStringEnc);
+        headers.put("Content-type", "application/json");
 
         Gson gson = new Gson();
-        String jsonSettingPoolDTO = gson.toJson(documentDTO);
-        ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpPost(poolUrl, jsonSettingPoolDTO, headers, RequestConfig.DEFAULT, 1, 1);
+        String jsonDocumentDTO= gson.toJson(documentDTO);
+        ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpPost(poolUrl, jsonDocumentDTO, headers, RequestConfig.DEFAULT, 1, 1);
 
         if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
             log.info("Document sent.");
-
         } else {
             log.error("Error while sending document!");
+            log.error(responseContent == null ? "ResponseContent is null!" : responseContent.toString());
         }
     }
 
@@ -323,6 +325,7 @@ public class CrobotWorker {
     private void startProcess(String daire, int selection, String selectedYear, String startNumber, String endNumber, boolean firstRun, String fileSavePath) throws
             IOException, InterruptedException {
         JavascriptExecutor jsExcecutor = (JavascriptExecutor) driver;
+        Integer preSelection = null;
 
         String path = System.getProperty("user.dir") + "/captcha.png";
         if (solvedCaptcha == null) {
@@ -354,34 +357,37 @@ public class CrobotWorker {
             kurullar.click();
 
             List<WebElement> kurullarList = driver.findElements(By.cssSelector("#aramaForm\\:kurulCombo_panel li.ui-selectcheckboxmenu-item"));
-            kurullarList.clear();
-//            if (selection != 0)
-//                kurullarList.get(selection - 1).click();
+
+            if (preSelection != null)
+                kurullarList.get(preSelection).click();
             TimeUnit.MILLISECONDS.sleep(100);
             kurullarList.get(selection).click();
             kurullar.click();
+            preSelection = selection;
         } else if (DefinitionType.CEZA_DAIRESI.name().equals(daire)) {
             WebElement cezaDaire = driver.findElement(By.cssSelector("#aramaForm\\:cezaDaireCombo"));
             cezaDaire.click();
 
             List<WebElement> cezaDaireList = driver.findElements(By.cssSelector("#aramaForm\\:cezaDaireCombo_panel li.ui-selectcheckboxmenu-item"));
-            cezaDaireList.clear();
-//            if (selection != 0)
-//                cezaDaireList.get(selection - 1).click();
+
+            if (preSelection != null)
+                cezaDaireList.get(preSelection).click();
             TimeUnit.MILLISECONDS.sleep(100);
             cezaDaireList.get(selection).click();
             cezaDaire.click();
+            preSelection = selection;
         } else if (DefinitionType.HUKUK_DAIRESI.name().equals(daire)) {
             WebElement hukukDaire = driver.findElement(By.cssSelector("#aramaForm\\:hukukDaireCombo"));
             hukukDaire.click();
 
             List<WebElement> hukukDaireList = driver.findElements(By.cssSelector("#aramaForm\\:hukukDaireCombo_panel li.ui-selectcheckboxmenu-item"));
-            hukukDaireList.clear();
-//            if (selection != 0)
-//                hukukDaireList.get(selection - 1).click();
+
+            if (preSelection != null)
+                hukukDaireList.get(preSelection).click();
             TimeUnit.MILLISECONDS.sleep(100);
             hukukDaireList.get(selection).click();
             hukukDaire.click();
+            preSelection = selection;
         }
 
 
@@ -538,7 +544,7 @@ public class CrobotWorker {
                     writeToFile(fileSavePath + "\\\\" + sanitizeFilename(fileName) + ".txt", contentStr);
 
                     DocumentDTO documentDTO = new DocumentDTO();
-                    documentDTO.setData(contentStr.getBytes(StandardCharsets.UTF_8));
+                    documentDTO.setDocumentData(contentStr.getBytes(StandardCharsets.UTF_8));
                     documentDTO.setDocumentName(fileName);
                     documentDTO.setVerdictYear(Integer.parseInt(selectedYear));
                     documentDTO.setDefinitionType(daire);
@@ -558,7 +564,7 @@ public class CrobotWorker {
             }
             // driver.findElement(By.className("ui-dialog-titlebar-close")).click();
         }
-        TimeUnit.SECONDS.sleep(AppProperties.getInstance().getPropertyAsInt("web.page.request.fair.duration"));
+        TimeUnit.SECONDS.sleep(fairDuration);
 
     }
 
