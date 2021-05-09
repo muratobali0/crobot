@@ -1,10 +1,14 @@
 package com.crobot.worker;
 
+import com.crobot.dto.DocumentDTO;
+import com.crobot.dto.SettingDTO;
+import com.crobot.dto.SettingPoolDTO;
 import com.crobot.http.CaptchaRequestDTO;
 import com.crobot.http.CaptchaResponseDTO;
 import com.crobot.http.HttpClientUtil;
 import com.crobot.http.ResponseContent;
-import com.crobot.page.DaireType;
+import com.crobot.page.DefinitionType;
+import com.crobot.page.SettingPoolStatus;
 import com.crobot.util.AppProperties;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
@@ -16,12 +20,15 @@ import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.io.FileHandler;
 import org.openqa.selenium.remote.CapabilityType;
-import org.openqa.selenium.remote.DesiredCapabilities;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.*;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -29,15 +36,22 @@ public class CrobotWorker {
     long start;
     private WebDriver driver;
     private String solvedCaptcha;
+    private String serverUrl;
+    private String userName;
+    private String password;
+    private Integer fairDuration = 20;
 
-    public CrobotWorker() {
+    public CrobotWorker(String serverUrl, String userName, String password) {
+        this.serverUrl = serverUrl;
+        this.userName = userName;
+        this.password = password;
         log.info("Created CrobotWorker.");
     }
 
-    public static void main(String[] args) throws InterruptedException, IOException {
-        CrobotWorker crobotWorker = new CrobotWorker();
-        crobotWorker.start();
-    }
+//    public static void main(String[] args) throws InterruptedException, IOException {
+//        CrobotWorker crobotWorker = new CrobotWorker();
+//        crobotWorker.start();
+//    }
 
     public void start() throws InterruptedException, IOException {
         start = System.currentTimeMillis();
@@ -47,17 +61,15 @@ public class CrobotWorker {
         String downloadPath = AppProperties.getInstance().getProperty("file.download.path");
         System.setProperty("webdriver.chrome.driver", AppProperties.getInstance().getProperty("webdriver.chrome.driver"));
 
-        ChromeOptions options = new ChromeOptions();
-        options.addArguments("--disable-notifications");
+        ChromeOptions chromeOptions = new ChromeOptions();
+        chromeOptions.addArguments("--disable-notifications");
         HashMap<String, Object> chromePrefs = new HashMap<>();
         chromePrefs.put("profile.default_content_settings.popups", 0);
         chromePrefs.put("download.default_directory", downloadPath);
-        options.setExperimentalOption("prefs", chromePrefs);
-        DesiredCapabilities cap = DesiredCapabilities.chrome();
-        cap.setCapability(CapabilityType.ACCEPT_SSL_CERTS, true);
-        cap.setCapability(ChromeOptions.CAPABILITY, options);
+        chromeOptions.setExperimentalOption("prefs", chromePrefs);
+        chromeOptions.setCapability(CapabilityType.ACCEPT_SSL_CERTS, true);
 
-        driver = new ChromeDriver(cap);
+        driver = new ChromeDriver(chromeOptions);
         driver.manage().window().maximize();
 
         try {
@@ -124,52 +136,183 @@ public class CrobotWorker {
         return result;
     }
 
-    private void startLoop() throws InterruptedException, IOException {
-        driver.get(AppProperties.getInstance().getProperty("web.page.url"));
-        TimeUnit.SECONDS.sleep(5);
+    /**
+     * @return
+     */
+    private SettingDTO getSettings() {
+        SettingDTO result = null;
+        String settingUrl = serverUrl + "/v1/api/setting";
+        String authString = this.userName + ":" + this.password;
+        String authStringEnc = new String(Base64.getEncoder().encode(authString.getBytes()));
 
-        List<Integer> selectionList = new ArrayList<>();
-        List<String> kararYilList = AppProperties.getInstance().getPropertyAsStringList("web.page.karar.yil");
-        int startNumber = AppProperties.getInstance().getPropertyAsInt("web.page.karar.no.start");
-        int endNumber = AppProperties.getInstance().getPropertyAsInt("web.page.karar.no.end");
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "application/json");
+        headers.put("Authorization", "Basic " + authStringEnc);
+        ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpGet(settingUrl, headers, RequestConfig.DEFAULT, 1, 1);
+
+        if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
+            Gson gson = new Gson();
+            result = gson.fromJson(responseContent.getContent(), SettingDTO.class);
+        } else {
+            log.error("Error while getting settings!");
+        }
+        return result;
+    }
+
+    /**
+     * @return
+     */
+    private SettingPoolDTO fetchOneFromPool() {
+        SettingPoolDTO result = null;
+        String poolUrl = serverUrl + "/v1/api/pool/fetchone";
+        String authString = this.userName + ":" + this.password;
+        String authStringEnc = new String(Base64.getEncoder().encode(authString.getBytes()));
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "application/json");
+        headers.put("Authorization", "Basic " + authStringEnc);
+
+        ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpGet(poolUrl, headers, RequestConfig.DEFAULT, 1, 1);
+
+        if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
+            Gson gson = new Gson();
+            result = gson.fromJson(responseContent.getContent(), SettingPoolDTO.class);
+        } else {
+            log.error("Error while getting settings!");
+        }
+        return result;
+    }
+
+    private void updatePool(SettingPoolDTO settingPoolDTO) {
+        String poolUrl = serverUrl + "/v1/api/pool/update";
+        String authString = this.userName + ":" + this.password;
+        String authStringEnc = new String(Base64.getEncoder().encode(authString.getBytes()));
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "application/json");
+        headers.put("Authorization", "Basic " + authStringEnc);
+
+        Gson gson = new Gson();
+        String jsonSettingPoolDTO = gson.toJson(settingPoolDTO);
+        ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpPost(poolUrl, jsonSettingPoolDTO, headers, RequestConfig.DEFAULT, 1, 1);
+
+        if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
+            log.info("Setting Pool updated.");
+
+        } else {
+            log.error("Error while getting settings!");
+        }
+    }
+
+    private void sendDocument(DocumentDTO documentDTO) {
+        String poolUrl = serverUrl + "/v1/api/add/document";
+        String authString = this.userName + ":" + this.password;
+        String authStringEnc = new String(Base64.getEncoder().encode(authString.getBytes()));
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "application/json");
+        headers.put("Authorization", "Basic " + authStringEnc);
+
+        Gson gson = new Gson();
+        String jsonSettingPoolDTO = gson.toJson(documentDTO);
+        ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpPost(poolUrl, jsonSettingPoolDTO, headers, RequestConfig.DEFAULT, 1, 1);
+
+        if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
+            log.info("Document sent.");
+
+        } else {
+            log.error("Error while sending document!");
+        }
+    }
+
+
+    /**
+     * @throws InterruptedException
+     * @throws IOException
+     */
+    private void startLoop() throws InterruptedException, IOException {
+        SettingDTO settingDTO = getSettings();
+        if (settingDTO == null || settingDTO.getWebPageUrl() == null) {
+            log.error("Could not found settings..");
+            return;
+        }
         String fileSavePath = AppProperties.getInstance().getProperty("file.save.path");
 
-        int daire = Integer.parseInt(AppProperties.getInstance().getProperty("web.page.daire"));
-        if (daire == DaireType.KURUL.getValue()) {
-            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.kurul");
-        } else if (daire == DaireType.CEZA.getValue()) {
-            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.ceza");
-        } else if (daire == DaireType.HUKUK.getValue()) {
-            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.hukuk");
+        this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
+        driver.get(settingDTO.getWebPageUrl());
+        TimeUnit.SECONDS.sleep(this.fairDuration);
+
+        // NEED LOOP
+
+        SettingPoolDTO settingPoolDTO = fetchOneFromPool();
+        if (settingPoolDTO == null) {
+            log.error("There no SettingPool record!");
+            return;
         }
 
-        int recordSize = 35;
-        int difference = endNumber % recordSize;
-        //String solvedCaptcha = null;
+        String daire = settingPoolDTO.getDefinitionType();
+        int selection = settingPoolDTO.getOrderNumber();
+        int verdictYear = settingPoolDTO.getYear();
+        int verdictNoStart = settingPoolDTO.getVerdictNoStart();
+        int verdictNoEnd = settingPoolDTO.getVerdictNoEnd();
+
         boolean firstRun = true;
-        for (Integer selection : selectionList) {
-            boolean selectionChanged = true;
-            for (String kararYil : kararYilList) {
-                boolean yearChanged = true;
-                int currentNumber = startNumber;
-                while (currentNumber <= endNumber + difference) {
-                    startProcess(daire, selection - 1, kararYil, currentNumber + "", (currentNumber + recordSize) + "", yearChanged, selectionChanged, firstRun, fileSavePath);
-                    yearChanged = false;
-                    selectionChanged = false;
-                    firstRun = false;
-                    try {
-                        startProcess(daire, selection - 1, kararYil, currentNumber + "", (currentNumber + recordSize) + "", yearChanged, selectionChanged, firstRun, fileSavePath);
-                    } catch (Exception e) {
-                        log.error("Error while processing.. Daire: " + daire
-                                + " Selection: " + selection
-                                + " Karar Yil: " + kararYil
-                                + " Karar Start No: " + currentNumber);
-                        log.error("Exception", e);
-                    }
-                    currentNumber = currentNumber + recordSize;
-                }
+        int recordSize = 37;
+        int difference = verdictNoEnd % recordSize;
+        int currentNumber = verdictNoStart;
+        while (currentNumber <= verdictNoEnd + difference) {
+            try {
+                startProcess(daire, selection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath);
+                firstRun = false;
+            } catch (Exception e) {
+                log.error("Exception", e);
             }
+            currentNumber = currentNumber + recordSize;
         }
+
+        settingPoolDTO.setStatus(SettingPoolStatus.PROCESSED.name());
+        updatePool(settingPoolDTO);
+
+
+//        List<Integer> selectionList = new ArrayList<>();
+//        List<String> kararYilList = AppProperties.getInstance().getPropertyAsStringList("web.page.karar.yil");
+//
+//        int daire = Integer.parseInt(AppProperties.getInstance().getProperty("web.page.daire"));
+//        if (daire == DaireType.KURUL.getValue()) {
+//            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.kurul");
+//        } else if (daire == DaireType.CEZA.getValue()) {
+//            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.ceza");
+//        } else if (daire == DaireType.HUKUK.getValue()) {
+//            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.hukuk");
+//        }
+//
+//        int recordSize = 35;
+//        int difference = endNumber % recordSize;
+//        //String solvedCaptcha = null;
+//        boolean firstRun = true;
+//        for (Integer selection : selectionList) {
+//            boolean selectionChanged = true;
+//            for (String kararYil : kararYilList) {
+//                boolean yearChanged = true;
+//                int currentNumber = startNumber;
+//                while (currentNumber <= endNumber + difference) {
+//                    startProcess(daire, selection - 1, kararYil, currentNumber + "", (currentNumber + recordSize) + "", yearChanged, selectionChanged, firstRun, fileSavePath);
+//                    yearChanged = false;
+//                    selectionChanged = false;
+//                    firstRun = false;
+//                    try {
+//                        startProcess(daire, selection - 1, kararYil, currentNumber + "", (currentNumber + recordSize) + "", yearChanged, selectionChanged, firstRun, fileSavePath);
+//                    } catch (Exception e) {
+//                        log.error("Error while processing.. Daire: " + daire
+//                                + " Selection: " + selection
+//                                + " Karar Yil: " + kararYil
+//                                + " Karar Start No: " + currentNumber);
+//                        log.error("Exception", e);
+//                    }
+//                    currentNumber = currentNumber + recordSize;
+//                }
+//            }
+//        }
 
 
     }
@@ -177,7 +320,8 @@ public class CrobotWorker {
     /**
      * @throws Exception
      */
-    private void startProcess(int daire, int selection, String selectedYear, String startNumber, String endNumber, boolean yearChanged, boolean selectionChanged, boolean firstRun, String fileSavePath) throws IOException, InterruptedException {
+    private void startProcess(String daire, int selection, String selectedYear, String startNumber, String endNumber, boolean firstRun, String fileSavePath) throws
+            IOException, InterruptedException {
         JavascriptExecutor jsExcecutor = (JavascriptExecutor) driver;
 
         String path = System.getProperty("user.dir") + "/captcha.png";
@@ -204,49 +348,50 @@ public class CrobotWorker {
             TimeUnit.SECONDS.sleep(1);
         }
 
-        if (selectionChanged) {
-            if (daire == DaireType.KURUL.getValue()) {
-                WebElement kurullar = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
-                kurullar.click();
 
-                List<WebElement> kurullarList = driver.findElements(By.cssSelector("#aramaForm\\:kurulCombo_panel li.ui-selectcheckboxmenu-item"));
-                if (selection != 0)
-                    kurullarList.get(selection - 1).click();
-                TimeUnit.MILLISECONDS.sleep(100);
-                kurullarList.get(selection).click();
-                kurullar.click();
-            } else if (daire == DaireType.CEZA.getValue()) {
-                WebElement cezaDaire = driver.findElement(By.cssSelector("#aramaForm\\:cezaDaireCombo"));
-                cezaDaire.click();
+        if (DefinitionType.KURUL.name().equals(daire)) {
+            WebElement kurullar = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
+            kurullar.click();
 
-                List<WebElement> cezaDaireList = driver.findElements(By.cssSelector("#aramaForm\\:cezaDaireCombo_panel li.ui-selectcheckboxmenu-item"));
-                if (selection != 0)
-                    cezaDaireList.get(selection - 1).click();
-                TimeUnit.MILLISECONDS.sleep(100);
-                cezaDaireList.get(selection).click();
-                cezaDaire.click();
-            } else if (daire == DaireType.HUKUK.getValue()) {
-                WebElement hukukDaire = driver.findElement(By.cssSelector("#aramaForm\\:hukukDaireCombo"));
-                hukukDaire.click();
-
-                List<WebElement> hukukDaireList = driver.findElements(By.cssSelector("#aramaForm\\:hukukDaireCombo_panel li.ui-selectcheckboxmenu-item"));
-                if (selection != 0)
-                    hukukDaireList.get(selection - 1).click();
-                TimeUnit.MILLISECONDS.sleep(100);
-                hukukDaireList.get(selection).click();
-                hukukDaire.click();
-            }
-        }
-
-
-        if (yearChanged) {
-            WebElement kararYili = driver.findElement(By.cssSelector("#aramaForm\\:karaYilInput"));
-            kararYili.clear();
+            List<WebElement> kurullarList = driver.findElements(By.cssSelector("#aramaForm\\:kurulCombo_panel li.ui-selectcheckboxmenu-item"));
+            kurullarList.clear();
+//            if (selection != 0)
+//                kurullarList.get(selection - 1).click();
             TimeUnit.MILLISECONDS.sleep(100);
-            kararYili.sendKeys(selectedYear);
-            jsExcecutor.executeScript("$(arguments[0]).change();", kararYili);
-            TimeUnit.SECONDS.sleep(1);
+            kurullarList.get(selection).click();
+            kurullar.click();
+        } else if (DefinitionType.CEZA_DAIRESI.name().equals(daire)) {
+            WebElement cezaDaire = driver.findElement(By.cssSelector("#aramaForm\\:cezaDaireCombo"));
+            cezaDaire.click();
+
+            List<WebElement> cezaDaireList = driver.findElements(By.cssSelector("#aramaForm\\:cezaDaireCombo_panel li.ui-selectcheckboxmenu-item"));
+            cezaDaireList.clear();
+//            if (selection != 0)
+//                cezaDaireList.get(selection - 1).click();
+            TimeUnit.MILLISECONDS.sleep(100);
+            cezaDaireList.get(selection).click();
+            cezaDaire.click();
+        } else if (DefinitionType.HUKUK_DAIRESI.name().equals(daire)) {
+            WebElement hukukDaire = driver.findElement(By.cssSelector("#aramaForm\\:hukukDaireCombo"));
+            hukukDaire.click();
+
+            List<WebElement> hukukDaireList = driver.findElements(By.cssSelector("#aramaForm\\:hukukDaireCombo_panel li.ui-selectcheckboxmenu-item"));
+            hukukDaireList.clear();
+//            if (selection != 0)
+//                hukukDaireList.get(selection - 1).click();
+            TimeUnit.MILLISECONDS.sleep(100);
+            hukukDaireList.get(selection).click();
+            hukukDaire.click();
         }
+
+
+        WebElement kararYili = driver.findElement(By.cssSelector("#aramaForm\\:karaYilInput"));
+        kararYili.clear();
+        TimeUnit.MILLISECONDS.sleep(100);
+        kararYili.sendKeys(selectedYear);
+        jsExcecutor.executeScript("$(arguments[0]).change();", kararYili);
+        TimeUnit.SECONDS.sleep(1);
+
 
         WebElement ilkKararNo = driver.findElement(By.cssSelector("#aramaForm\\:ilkKararNoInput"));
         ilkKararNo.click();
@@ -301,14 +446,14 @@ public class CrobotWorker {
 
         boolean isSearchParamError = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Aranacak Kavram Boş Olamaz!");
         if (isSearchParamError) {
-            if (yearChanged) {
-                WebElement kararYili = driver.findElement(By.cssSelector("#aramaForm\\:karaYilInput"));
-                kararYili.clear();
-                TimeUnit.MILLISECONDS.sleep(100);
-                kararYili.sendKeys(selectedYear);
-                jsExcecutor.executeScript("$(arguments[0]).change();", kararYili);
-                TimeUnit.SECONDS.sleep(1);
-            }
+
+            kararYili = driver.findElement(By.cssSelector("#aramaForm\\:karaYilInput"));
+            kararYili.clear();
+            TimeUnit.MILLISECONDS.sleep(100);
+            kararYili.sendKeys(selectedYear);
+            jsExcecutor.executeScript("$(arguments[0]).change();", kararYili);
+            TimeUnit.SECONDS.sleep(1);
+
 
             ilkKararNo = driver.findElement(By.cssSelector("#aramaForm\\:ilkKararNoInput"));
             ilkKararNo.click();
@@ -391,6 +536,13 @@ public class CrobotWorker {
                     fileName = fileName.substring(0, Math.min(fileName.length(), 250));
 
                     writeToFile(fileSavePath + "\\\\" + sanitizeFilename(fileName) + ".txt", contentStr);
+
+                    DocumentDTO documentDTO = new DocumentDTO();
+                    documentDTO.setData(contentStr.getBytes(StandardCharsets.UTF_8));
+                    documentDTO.setDocumentName(fileName);
+                    documentDTO.setVerdictYear(Integer.parseInt(selectedYear));
+                    documentDTO.setDefinitionType(daire);
+                    sendDocument(documentDTO);
 
                 }
             }

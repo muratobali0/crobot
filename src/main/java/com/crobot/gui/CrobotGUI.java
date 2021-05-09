@@ -390,7 +390,7 @@ public class CrobotGUI extends JFrame {
         @Override
         protected Void doInBackground() {
 
-            CrobotWorker crobotWorker = new CrobotWorker();
+            CrobotWorker crobotWorker = new CrobotWorker(serverUrl, userName, password);
             try {
                 crobotWorker.start();
             } catch (InterruptedException e) {
