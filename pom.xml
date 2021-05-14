@@ -21,11 +21,6 @@
             <artifactId>selenium-java</artifactId>
             <version>3.141.59</version>
         </dependency>
-<!--        <dependency>-->
-<!--            <groupId>net.sourceforge.tess4j</groupId>-->
-<!--            <artifactId>tess4j</artifactId>-->
-<!--            <version>4.2.1</version>-->
-<!--        </dependency>-->
 
         <!-- Logger dependencies -->
         <dependency>

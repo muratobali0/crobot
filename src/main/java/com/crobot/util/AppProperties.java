@@ -54,6 +54,18 @@ public class AppProperties {
     }
 
     /**
+     * @param property
+     * @return
+     */
+    public boolean getPropertyAsBoolean(String property) {
+        try {
+            return Boolean.parseBoolean(properties.getProperty(property));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Converts property and returns list of integers
      *
      * @param property
@@ -66,7 +78,6 @@ public class AppProperties {
     }
 
     /**
-     *
      * @param property
      * @return
      */

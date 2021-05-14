@@ -97,6 +97,9 @@ public class CrobotGUI extends JFrame {
                 testServerConnection(false);
             }
         });
+        textFieldServerAddress.setText("http://localhost:8090");
+        textFieldUsername.setText("crobot");
+        passwordFieldPassword.setText("secret");
     }
 
     private void startProcess() {

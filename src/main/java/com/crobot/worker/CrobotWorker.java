@@ -3,6 +3,9 @@ package com.crobot.worker;
 import com.crobot.dto.DocumentDTO;
 import com.crobot.dto.SettingDTO;
 import com.crobot.dto.SettingPoolDTO;
+import com.crobot.exception.CaptchaException;
+import com.crobot.exception.NoResultException;
+import com.crobot.exception.ValidationException;
 import com.crobot.http.CaptchaRequestDTO;
 import com.crobot.http.CaptchaResponseDTO;
 import com.crobot.http.HttpClientUtil;
@@ -39,7 +42,7 @@ public class CrobotWorker {
     private String serverUrl;
     private String userName;
     private String password;
-    private Integer fairDuration = 20;
+    private Integer fairDuration = 10;
 
     public CrobotWorker(String serverUrl, String userName, String password) {
         this.serverUrl = serverUrl;
@@ -57,23 +60,28 @@ public class CrobotWorker {
         start = System.currentTimeMillis();
         log.info("Crobot Worker Started.");
         AppProperties.getInstance().init();
+        boolean downloadPdf = AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf");
+        boolean saveTxt = AppProperties.getInstance().getPropertyAsBoolean("file.save.txt");
 
-        String downloadPath = AppProperties.getInstance().getProperty("file.download.path");
         System.setProperty("webdriver.chrome.driver", AppProperties.getInstance().getProperty("webdriver.chrome.driver"));
 
         ChromeOptions chromeOptions = new ChromeOptions();
         chromeOptions.addArguments("--disable-notifications");
         HashMap<String, Object> chromePrefs = new HashMap<>();
         chromePrefs.put("profile.default_content_settings.popups", 0);
-        chromePrefs.put("download.default_directory", downloadPath);
+
+        if (downloadPdf)
+            chromePrefs.put("download.default_directory", AppProperties.getInstance().getProperty("file.download.path"));
+
         chromeOptions.setExperimentalOption("prefs", chromePrefs);
         chromeOptions.setCapability(CapabilityType.ACCEPT_SSL_CERTS, true);
+        chromeOptions.addArguments("--start-maximized");
 
         driver = new ChromeDriver(chromeOptions);
-        driver.manage().window().maximize();
+//        driver.manage().window().maximize();
 
         try {
-            startLoop();
+            startLoop(downloadPdf, saveTxt);
         } catch (Exception e) {
             e.printStackTrace();
             throw e;
@@ -216,7 +224,7 @@ public class CrobotWorker {
         headers.put("Content-type", "application/json");
 
         Gson gson = new Gson();
-        String jsonDocumentDTO= gson.toJson(documentDTO);
+        String jsonDocumentDTO = gson.toJson(documentDTO);
         ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpPost(poolUrl, jsonDocumentDTO, headers, RequestConfig.DEFAULT, 1, 1);
 
         if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
@@ -232,10 +240,10 @@ public class CrobotWorker {
      * @throws InterruptedException
      * @throws IOException
      */
-    private void startLoop() throws InterruptedException, IOException {
+    private void startLoop(boolean downloadPdf, boolean saveTxt) throws InterruptedException, IOException {
         SettingDTO settingDTO = getSettings();
         if (settingDTO == null || settingDTO.getWebPageUrl() == null) {
-            log.error("Could not found settings..");
+            log.error("ERROR SL001 Could not found settings..");
             return;
         }
         String fileSavePath = AppProperties.getInstance().getProperty("file.save.path");
@@ -244,11 +252,11 @@ public class CrobotWorker {
         driver.get(settingDTO.getWebPageUrl());
         TimeUnit.SECONDS.sleep(this.fairDuration);
 
-        // NEED LOOP
+        // TODO: NEED LOOP
 
         SettingPoolDTO settingPoolDTO = fetchOneFromPool();
         if (settingPoolDTO == null) {
-            log.error("There no SettingPool record!");
+            log.error("ERROR SL002 There no SettingPool record!");
             return;
         }
 
@@ -264,10 +272,18 @@ public class CrobotWorker {
         int currentNumber = verdictNoStart;
         while (currentNumber <= verdictNoEnd + difference) {
             try {
-                startProcess(daire, selection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath);
+                startProcess(daire, selection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt);
+                firstRun = false;
+            } catch (CaptchaException e) {
+                log.error("ERROR SL003 Captcha error. Renewing request..");
+                startProcess(daire, selection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt);
+                firstRun = false;
+            } catch (ValidationException e) {
+                log.error("ERROR SL004 Form validation error. Renewing request..");
+                startProcess(daire, selection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt);
                 firstRun = false;
             } catch (Exception e) {
-                log.error("Exception", e);
+                log.error("ERROR SL005 Exception", e);
             }
             currentNumber = currentNumber + recordSize;
         }
@@ -276,72 +292,38 @@ public class CrobotWorker {
         updatePool(settingPoolDTO);
 
 
-//        List<Integer> selectionList = new ArrayList<>();
-//        List<String> kararYilList = AppProperties.getInstance().getPropertyAsStringList("web.page.karar.yil");
-//
-//        int daire = Integer.parseInt(AppProperties.getInstance().getProperty("web.page.daire"));
-//        if (daire == DaireType.KURUL.getValue()) {
-//            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.kurul");
-//        } else if (daire == DaireType.CEZA.getValue()) {
-//            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.ceza");
-//        } else if (daire == DaireType.HUKUK.getValue()) {
-//            selectionList = AppProperties.getInstance().getPropertyAsIntegerList("web.page.daire.hukuk");
-//        }
-//
-//        int recordSize = 35;
-//        int difference = endNumber % recordSize;
-//        //String solvedCaptcha = null;
-//        boolean firstRun = true;
-//        for (Integer selection : selectionList) {
-//            boolean selectionChanged = true;
-//            for (String kararYil : kararYilList) {
-//                boolean yearChanged = true;
-//                int currentNumber = startNumber;
-//                while (currentNumber <= endNumber + difference) {
-//                    startProcess(daire, selection - 1, kararYil, currentNumber + "", (currentNumber + recordSize) + "", yearChanged, selectionChanged, firstRun, fileSavePath);
-//                    yearChanged = false;
-//                    selectionChanged = false;
-//                    firstRun = false;
-//                    try {
-//                        startProcess(daire, selection - 1, kararYil, currentNumber + "", (currentNumber + recordSize) + "", yearChanged, selectionChanged, firstRun, fileSavePath);
-//                    } catch (Exception e) {
-//                        log.error("Error while processing.. Daire: " + daire
-//                                + " Selection: " + selection
-//                                + " Karar Yil: " + kararYil
-//                                + " Karar Start No: " + currentNumber);
-//                        log.error("Exception", e);
-//                    }
-//                    currentNumber = currentNumber + recordSize;
-//                }
-//            }
-//        }
-
-
     }
 
     /**
      * @throws Exception
      */
-    private void startProcess(String daire, int selection, String selectedYear, String startNumber, String endNumber, boolean firstRun, String fileSavePath) throws
-            IOException, InterruptedException {
+    private void startProcess(String daire, int selection, String selectedYear, String startNumber, String endNumber,
+                              boolean firstRun, String fileSavePath, boolean downloadPdf, boolean saveTxt) throws
+            IOException, InterruptedException, CaptchaException {
         JavascriptExecutor jsExcecutor = (JavascriptExecutor) driver;
         Integer preSelection = null;
 
         String path = System.getProperty("user.dir") + "/captcha.png";
         if (solvedCaptcha == null) {
-            for (int i = 0; i < 100; i++) {
+            for (int i = 0; i < 3; i++) {
                 File captchaSrc = driver.findElement(By.id("aramaForm:cptImg")).getScreenshotAs(OutputType.FILE);
                 FileHandler.copy(captchaSrc, new File(path));
                 solvedCaptcha = solveCaptcha(path);
-                if (solvedCaptcha != null)
+                if (solvedCaptcha != null) {
                     break;
-                log.error("Captcha did no solved. Waiting 10 seconds..");
-                TimeUnit.SECONDS.sleep(10);
+                } else {
+                    log.error("ERR-SP001 Captcha did not solved! Refreshing captcha and trying again..");
+                    driver.findElement(By.id("aramaForm:refreshCapcha")).click();
+                    TimeUnit.SECONDS.sleep(2);
+                }
             }
+            if (solvedCaptcha == null)
+                log.error("ERR-SP002 Captcha did not solved!");
         }
 
         if (firstRun) {
             WebElement guvenlikKodu = driver.findElement(By.cssSelector("#aramaForm\\:guvenlikKodu"));
+            guvenlikKodu.clear();
             guvenlikKodu.sendKeys(solvedCaptcha);
             jsExcecutor.executeScript("$(arguments[0]).change();", guvenlikKodu);
             TimeUnit.SECONDS.sleep(1);
@@ -351,6 +333,12 @@ public class CrobotWorker {
             TimeUnit.SECONDS.sleep(1);
         }
 
+        WebElement kurulCombo = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
+        if (!kurulCombo.isDisplayed()) {
+            WebElement detayliAramaLink = driver.findElement(By.cssSelector("#aramaForm\\:detayliAramaCl"));
+            detayliAramaLink.click();
+            TimeUnit.SECONDS.sleep(1);
+        }
 
         if (DefinitionType.KURUL.name().equals(daire)) {
             WebElement kurullar = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
@@ -390,104 +378,33 @@ public class CrobotWorker {
             preSelection = selection;
         }
 
-
-        WebElement kararYili = driver.findElement(By.cssSelector("#aramaForm\\:karaYilInput"));
-        kararYili.clear();
-        TimeUnit.MILLISECONDS.sleep(100);
-        kararYili.sendKeys(selectedYear);
-        jsExcecutor.executeScript("$(arguments[0]).change();", kararYili);
+        sendKeys("#aramaForm\\:karaYilInput", selectedYear, driver, jsExcecutor);
         TimeUnit.SECONDS.sleep(1);
 
-
-        WebElement ilkKararNo = driver.findElement(By.cssSelector("#aramaForm\\:ilkKararNoInput"));
-        ilkKararNo.click();
+        sendKeys("#aramaForm\\:ilkKararNoInput", startNumber, driver, jsExcecutor);
         TimeUnit.SECONDS.sleep(1);
 
-        ilkKararNo = driver.findElement(By.cssSelector("#aramaForm\\:ilkKararNoInput"));
-        ilkKararNo.click();
-        ilkKararNo.clear();
-        TimeUnit.MILLISECONDS.sleep(100);
-        ilkKararNo.sendKeys(startNumber);
-        jsExcecutor.executeScript("$(arguments[0]).change();", ilkKararNo);
+        sendKeys("#aramaForm\\:sonKararNoInput", endNumber, driver, jsExcecutor);
         TimeUnit.SECONDS.sleep(1);
 
-        WebElement sonKararNo = driver.findElement(By.cssSelector("#aramaForm\\:sonKararNoInput"));
-        sonKararNo.click();
-        TimeUnit.SECONDS.sleep(1);
-
-        sonKararNo = driver.findElement(By.cssSelector("#aramaForm\\:sonKararNoInput"));
-        sonKararNo.clear();
-        TimeUnit.MILLISECONDS.sleep(100);
-        sonKararNo.sendKeys(endNumber);
-        jsExcecutor.executeScript("$(arguments[0]).change();", sonKararNo);
+        driver.findElement(By.cssSelector("label[for='aramaForm:siralamaKriteri:1']")).click();
         TimeUnit.SECONDS.sleep(1);
 
         WebElement ara = driver.findElement(By.cssSelector("#aramaForm\\:detayliAraCommandButton"));
         ara.click();
         TimeUnit.SECONDS.sleep(5);
 
+        //Check form errors..
         boolean isCaptchaError = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Güvenlik Kodunu Kontrol Ediniz!");
-        if (isCaptchaError) {
-            for (int i = 0; i < 100; i++) {
-                File captchaSrc = driver.findElement(By.id("aramaForm:cptImg")).getScreenshotAs(OutputType.FILE);
-                FileHandler.copy(captchaSrc, new File(path));
-                solvedCaptcha = solveCaptcha(path);
-                if (solvedCaptcha != null)
-                    break;
-                log.error("Captcha did no solved. Waiting 10 seconds..");
-                TimeUnit.SECONDS.sleep(10);
-            }
-
-            WebElement guvenlikKodu = driver.findElement(By.cssSelector("#aramaForm\\:guvenlikKodu"));
-            guvenlikKodu.clear();
-            TimeUnit.SECONDS.sleep(1);
-            guvenlikKodu.sendKeys(solvedCaptcha);
-            jsExcecutor.executeScript("$(arguments[0]).change();", guvenlikKodu);
-            TimeUnit.SECONDS.sleep(1);
-
-            ara = driver.findElement(By.cssSelector("#aramaForm\\:detayliAraCommandButton"));
-            ara.click();
-            TimeUnit.SECONDS.sleep(3);
-        }
-
+        if (isCaptchaError)
+            throw new CaptchaException();
         boolean isSearchParamError = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Aranacak Kavram Boş Olamaz!");
-        if (isSearchParamError) {
+        if (isSearchParamError)
+            throw new ValidationException();
+        boolean isNoResult = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Sonuç Bulunamadı!");
+        if (isNoResult)
+            throw new NoResultException();
 
-            kararYili = driver.findElement(By.cssSelector("#aramaForm\\:karaYilInput"));
-            kararYili.clear();
-            TimeUnit.MILLISECONDS.sleep(100);
-            kararYili.sendKeys(selectedYear);
-            jsExcecutor.executeScript("$(arguments[0]).change();", kararYili);
-            TimeUnit.SECONDS.sleep(1);
-
-
-            ilkKararNo = driver.findElement(By.cssSelector("#aramaForm\\:ilkKararNoInput"));
-            ilkKararNo.click();
-            TimeUnit.SECONDS.sleep(1);
-
-            ilkKararNo = driver.findElement(By.cssSelector("#aramaForm\\:ilkKararNoInput"));
-            ilkKararNo.click();
-            ilkKararNo.clear();
-            TimeUnit.MILLISECONDS.sleep(100);
-            ilkKararNo.sendKeys(startNumber);
-            jsExcecutor.executeScript("$(arguments[0]).change();", ilkKararNo);
-            TimeUnit.SECONDS.sleep(1);
-
-            sonKararNo = driver.findElement(By.cssSelector("#aramaForm\\:sonKararNoInput"));
-            sonKararNo.click();
-            TimeUnit.SECONDS.sleep(1);
-
-            sonKararNo = driver.findElement(By.cssSelector("#aramaForm\\:sonKararNoInput"));
-            sonKararNo.clear();
-            TimeUnit.MILLISECONDS.sleep(100);
-            sonKararNo.sendKeys(endNumber);
-            jsExcecutor.executeScript("$(arguments[0]).change();", sonKararNo);
-            TimeUnit.SECONDS.sleep(1);
-
-            ara = driver.findElement(By.cssSelector("#aramaForm\\:detayliAraCommandButton"));
-            ara.click();
-            TimeUnit.SECONDS.sleep(5);
-        }
 
         List<WebElement> sonucButtonList = driver.findElements(By.cssSelector("button[id$='rowbtn']"));
         if (!sonucButtonList.isEmpty()) {
@@ -501,15 +418,14 @@ public class CrobotWorker {
                 pdfLink.click();
                 TimeUnit.SECONDS.sleep(1);
 
-                while (controlCount < 35) {
+                while (controlCount < 40) {
                     controlCount++;
                     WebElement sonrakiEvrakLink;
                     try {
-                        //sonrakiEvrakLink = driver.findElement(By.cssSelector("#aramaForm\\:sonrakiEvrakCmd"));
                         sonrakiEvrakLink = driver.findElement(By.cssSelector("#aramaForm\\:sonrakiEvrakLabel"));
                     } catch (Exception e) {
-                        log.error("Error with sonrakiEvrakLink");
-                        log.error("Error Detail", e);
+                        log.error("ERROR-SP003 Error with sonrakiEvrakLink");
+                        log.error("ERROR-SP003 Error Detail", e);
                         sonrakiEvrakLink = null;
 
                         List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
@@ -517,8 +433,8 @@ public class CrobotWorker {
                             try {
                                 closeButton.click();
                             } catch (Exception e1) {
-                                log.error("Error with dialog close button");
-                                log.error("Error Detail", e1);
+                                log.error("ERROR-SP004 Error with dialog close button");
+                                log.error("ERROR-SP004 Error Detail", e1);
                                 //do nothing..
                             }
                         }
@@ -528,8 +444,12 @@ public class CrobotWorker {
                         break;
                     }
 
-                    sonrakiEvrakLink.click();
-                    TimeUnit.SECONDS.sleep(2);
+                    try {
+                        sonrakiEvrakLink.click();
+                        TimeUnit.SECONDS.sleep(2);
+                    } catch (Exception e) {
+                        break;
+                    }
 
                     pdfLink = driver.findElement(By.cssSelector("#aramaForm\\:pdfOlusturCmd > img"));
                     pdfLink.click();
@@ -552,7 +472,6 @@ public class CrobotWorker {
 
                 }
             }
-            //driver.findElement(By.xpath("//a[@class='ui-dialog-titlebar-close']/a")).click();
 
             List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
             for (WebElement closeButton : dialogCloseButtons) {
@@ -562,7 +481,6 @@ public class CrobotWorker {
                     //do nothing..
                 }
             }
-            // driver.findElement(By.className("ui-dialog-titlebar-close")).click();
         }
         TimeUnit.SECONDS.sleep(fairDuration);
 
@@ -598,6 +516,41 @@ public class CrobotWorker {
     private String sanitizeFilename(String inputName) {
         return inputName.replaceAll("[^a-zA-Z0-9-_\\.]", "_");
     }
+
+    /**
+     * @param elementCssSelector
+     * @param value
+     * @return
+     * @throws InterruptedException
+     */
+    private WebElement sendKeys(String elementCssSelector, String value, WebDriver webDriver, JavascriptExecutor jsExcecutor) throws InterruptedException {
+        WebElement element = webDriver.findElement(By.cssSelector(elementCssSelector));
+        try {
+            element.click();
+            element.clear();
+        } catch (Exception e) {
+            element = webDriver.findElement(By.cssSelector(elementCssSelector));
+            element.click();
+            element.clear();
+        }
+        TimeUnit.MILLISECONDS.sleep(100);
+        try {
+            element.click();
+        } catch (Exception e) {
+            element = webDriver.findElement(By.cssSelector(elementCssSelector));
+            element.click();
+        }
+        TimeUnit.MILLISECONDS.sleep(100);
+        try {
+            element.sendKeys(value);
+        } catch (Exception e) {
+            element = webDriver.findElement(By.cssSelector(elementCssSelector));
+            element.sendKeys(value);
+        }
+        jsExcecutor.executeScript("$(arguments[0]).change();", element);
+        return element;
+    }
+
 }
 
 
