@@ -335,7 +335,6 @@ public class CrobotWorker {
 
             }
 
-
             List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
             for (WebElement closeButton : dialogCloseButtons) {
                 try {
@@ -345,7 +344,6 @@ public class CrobotWorker {
                 }
             }
         }
-        TimeUnit.SECONDS.sleep(fairDuration);
 
     }
 

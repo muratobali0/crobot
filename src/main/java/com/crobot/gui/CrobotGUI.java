@@ -42,6 +42,9 @@ public class CrobotGUI extends JFrame {
     private JLabel labelUsername;
     private JLabel labelPassword;
     private JButton buttonTestConnection;
+    private JLabel labelHelpServerAddress;
+    private JScrollPane jScrollPaneStaus;
+    private JTextArea textAreaStatus;
     private String serverUrl;
     private String userName;
     private String password;
@@ -59,6 +62,7 @@ public class CrobotGUI extends JFrame {
         initSystemTray();
         initCloseOperation();
         initActions();
+        textAreaStatus.append("Welcome to Crobot.");
 
         //setExtendedState(Frame.ICONIFIED);
         setFrameIcon();
@@ -81,7 +85,6 @@ public class CrobotGUI extends JFrame {
             @Override
             public void actionPerformed(ActionEvent actionEvent) {
                 startProcess();
-
             }
         });
         buttonStop.addActionListener(new ActionListener() {
@@ -103,8 +106,11 @@ public class CrobotGUI extends JFrame {
     }
 
     private void startProcess() {
+        textAreaStatus.append("\nChecking server connection..");
         boolean isTestOK = testServerConnection(true);
         if (isTestOK) {
+            textAreaStatus.append("\nServer connection is OK.");
+            textAreaStatus.append("\nStarting the process..");
             this.serverUrl = textFieldServerAddress.getText();
             this.userName = textFieldUsername.getText();
             this.password = new String(passwordFieldPassword.getPassword());
@@ -113,6 +119,8 @@ public class CrobotGUI extends JFrame {
             buttonStart.setEnabled(false);
             (getDocumentsTask = new GetDocumentsTask()).execute();
             buttonStart.setEnabled(true);
+        } else {
+            textAreaStatus.append("\nPlease check server connection!");
         }
     }
 
@@ -314,7 +322,7 @@ public class CrobotGUI extends JFrame {
         CellConstraints cc = new CellConstraints();
         panelMainHeader.add(labelHeader, cc.xy(1, 1, CellConstraints.FILL, CellConstraints.DEFAULT));
         panelMainBody = new JPanel();
-        panelMainBody.setLayout(new FormLayout("fill:d:noGrow,left:4dlu:noGrow,fill:d:grow", "center:d:noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow"));
+        panelMainBody.setLayout(new FormLayout("fill:d:noGrow,left:4dlu:noGrow,fill:d:grow", "center:d:noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:d:grow"));
         panelMain.add(panelMainBody, BorderLayout.CENTER);
         panelMainBody.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Server", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         labelServerAddress = new JLabel();
@@ -322,19 +330,29 @@ public class CrobotGUI extends JFrame {
         panelMainBody.add(labelServerAddress, cc.xy(1, 1));
         labelUsername = new JLabel();
         labelUsername.setText("Username");
-        panelMainBody.add(labelUsername, cc.xy(1, 3));
+        panelMainBody.add(labelUsername, cc.xy(1, 5));
         textFieldServerAddress = new JTextField();
         panelMainBody.add(textFieldServerAddress, cc.xy(3, 1, CellConstraints.FILL, CellConstraints.DEFAULT));
         textFieldUsername = new JTextField();
-        panelMainBody.add(textFieldUsername, cc.xy(3, 3, CellConstraints.FILL, CellConstraints.DEFAULT));
+        panelMainBody.add(textFieldUsername, cc.xy(3, 5, CellConstraints.FILL, CellConstraints.DEFAULT));
         passwordFieldPassword = new JPasswordField();
-        panelMainBody.add(passwordFieldPassword, cc.xy(3, 5, CellConstraints.FILL, CellConstraints.DEFAULT));
+        panelMainBody.add(passwordFieldPassword, cc.xy(3, 7, CellConstraints.FILL, CellConstraints.DEFAULT));
         labelPassword = new JLabel();
         labelPassword.setText("Password");
-        panelMainBody.add(labelPassword, cc.xy(1, 5));
+        panelMainBody.add(labelPassword, cc.xy(1, 7));
         buttonTestConnection = new JButton();
         buttonTestConnection.setText("Test Connection");
-        panelMainBody.add(buttonTestConnection, cc.xy(3, 7));
+        panelMainBody.add(buttonTestConnection, cc.xy(3, 9));
+        labelHelpServerAddress = new JLabel();
+        labelHelpServerAddress.setText("Ex: http://localhost:8090");
+        panelMainBody.add(labelHelpServerAddress, cc.xy(3, 3));
+        jScrollPaneStaus = new JScrollPane();
+        jScrollPaneStaus.setEnabled(true);
+        panelMainBody.add(jScrollPaneStaus, cc.xyw(1, 11, 3, CellConstraints.FILL, CellConstraints.FILL));
+        jScrollPaneStaus.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Status", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
+        textAreaStatus = new JTextArea();
+        textAreaStatus.setEditable(false);
+        jScrollPaneStaus.setViewportView(textAreaStatus);
         panelMainFooter = new JPanel();
         panelMainFooter.setLayout(new FormLayout("fill:d:grow,left:4dlu:noGrow,fill:d:grow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow", "center:d:noGrow"));
         panelMain.add(panelMainFooter, BorderLayout.SOUTH);
@@ -392,13 +410,17 @@ public class CrobotGUI extends JFrame {
     private class GetDocumentsTask extends SwingWorker<Void, Void> {
         @Override
         protected Void doInBackground() {
-
+            textAreaStatus.append("\nPlease wait while processing..");
             CrobotWorker crobotWorker = new CrobotWorker(serverUrl, userName, password);
             try {
                 crobotWorker.start();
             } catch (InterruptedException e) {
+                textAreaStatus.append("\nError while starting the process! Please check logs.");
+                log.error(e.getMessage());
                 e.printStackTrace();
             } catch (IOException e) {
+                textAreaStatus.append("\nError while starting the process! Please check logs.");
+                log.error(e.getMessage());
                 e.printStackTrace();
             }
             return null;
@@ -407,6 +429,7 @@ public class CrobotGUI extends JFrame {
         @Override
         public void done() {
             labelWorking.setIcon(new ImageIcon(getClass().getResource("/icons/blocks.png")));
+            textAreaStatus.append("\nProcess finished!");
             log.debug("GetDocumentsTask finished.");
         }
     }
