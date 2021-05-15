@@ -2,6 +2,7 @@ package com.crobot.gui;
 
 import com.crobot.http.HttpClientUtil;
 import com.crobot.http.ResponseContent;
+import com.crobot.util.PatternUtil;
 import com.crobot.worker.CrobotWorker;
 import com.jgoodies.forms.layout.CellConstraints;
 import com.jgoodies.forms.layout.FormLayout;
@@ -86,7 +87,7 @@ public class CrobotGUI extends JFrame {
         buttonStart.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent actionEvent) {
-               startProcess();
+              startProcess();
             }
         });
         buttonStop.addActionListener(new ActionListener() {
