@@ -27,6 +27,7 @@ import org.openqa.selenium.remote.CapabilityType;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
@@ -36,13 +37,14 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class CrobotWorker {
-    long start;
+    private final int maxDocumentCount = 38;
+    private final int recordSize = 30;
     private WebDriver driver;
     private String solvedCaptcha;
     private String serverUrl;
     private String userName;
     private String password;
-    private Integer fairDuration = 10;
+    private Integer fairDuration = 20;
 
     public CrobotWorker(String serverUrl, String userName, String password) {
         this.serverUrl = serverUrl;
@@ -51,37 +53,18 @@ public class CrobotWorker {
         log.info("Created CrobotWorker.");
     }
 
-//    public static void main(String[] args) throws InterruptedException, IOException {
-//        CrobotWorker crobotWorker = new CrobotWorker();
-//        crobotWorker.start();
-//    }
-
+    /**
+     * Start
+     *
+     * @throws InterruptedException
+     * @throws IOException
+     */
     public void start() throws InterruptedException, IOException {
-        start = System.currentTimeMillis();
-        log.info("Crobot Worker Started.");
+        log.info("Crobot Worker process started.");
         AppProperties.getInstance().init();
-        boolean downloadPdf = AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf");
-        boolean saveTxt = AppProperties.getInstance().getPropertyAsBoolean("file.save.txt");
-
-        System.setProperty("webdriver.chrome.driver", AppProperties.getInstance().getProperty("webdriver.chrome.driver"));
-
-        ChromeOptions chromeOptions = new ChromeOptions();
-        chromeOptions.addArguments("--disable-notifications");
-        HashMap<String, Object> chromePrefs = new HashMap<>();
-        chromePrefs.put("profile.default_content_settings.popups", 0);
-
-        if (downloadPdf)
-            chromePrefs.put("download.default_directory", AppProperties.getInstance().getProperty("file.download.path"));
-
-        chromeOptions.setExperimentalOption("prefs", chromePrefs);
-        chromeOptions.setCapability(CapabilityType.ACCEPT_SSL_CERTS, true);
-        chromeOptions.addArguments("--start-maximized");
-
-        driver = new ChromeDriver(chromeOptions);
-//        driver.manage().window().maximize();
-
+        driver = getNewDriver();
         try {
-            startLoop(downloadPdf, saveTxt);
+            startLoop(driver);
         } catch (Exception e) {
             e.printStackTrace();
             throw e;
@@ -89,11 +72,365 @@ public class CrobotWorker {
             driver.close();
             driver.quit();
         }
-
-        long elapsed = System.currentTimeMillis() - start;
-        log.info("elapsed time in sec: " + (elapsed / 1000));
-        System.exit(0);
+        log.info("Crobot Worker process finished.");
     }
+
+    /**
+     * @throws InterruptedException
+     * @throws IOException
+     */
+    private void startLoop(WebDriver driver) throws InterruptedException {
+        boolean downloadPdf = AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf");
+        boolean saveTxt = AppProperties.getInstance().getPropertyAsBoolean("file.save.txt");
+        String fileSavePath = AppProperties.getInstance().getProperty("file.save.path");
+        String preDaire = "";
+        int preSelection = -1;
+
+        SettingDTO settingDTO = getSettings();
+        if (settingDTO == null || settingDTO.getWebPageUrl() == null) {
+            log.error("ERROR SL001 Could not found settings..");
+            return;
+        }
+
+        this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
+        driver.get(settingDTO.getWebPageUrl());
+        TimeUnit.SECONDS.sleep(5);
+
+        //TODO: NEED CONTROLLED INFINITE LOOP
+        for (int i = 0; i < 10; i++) {
+            SettingPoolDTO settingPoolDTO = fetchOneFromPool();
+            if (settingPoolDTO == null) {
+                log.error("ERROR SL002 There no SettingPool record!");
+                return;
+            }
+
+            String daire = settingPoolDTO.getDefinitionType();
+            int selection = settingPoolDTO.getOrderNumber();
+            int verdictYear = settingPoolDTO.getYear();
+            int verdictNoStart = settingPoolDTO.getVerdictNoStart();
+            int verdictNoEnd = settingPoolDTO.getVerdictNoEnd();
+
+            boolean firstRun = true;
+            boolean resolveCaptcha = false;
+            int difference = verdictNoEnd % recordSize;
+            int currentNumber = verdictNoStart;
+            while (currentNumber <= verdictNoEnd + difference) {
+                try {
+                    startProcess(daire, selection, preDaire, preSelection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt, driver, resolveCaptcha);
+                    preDaire = daire;
+                    preSelection = selection;
+                    firstRun = false;
+                    resolveCaptcha = false;
+                    currentNumber = currentNumber + recordSize;
+                } catch (CaptchaException e) {
+                    log.error("ERROR SL003 - Captcha error. Renewing request..");
+                    resolveCaptcha = true;
+                } catch (ValidationException e) {
+                    log.error("ERROR SL004 - Form validation error. Renewing request..");
+                } catch (ConnectException | WebDriverException e) {
+                    log.error("ERROR SL005 - ConnectException | WebDriverException", e);
+                    TimeUnit.SECONDS.sleep(3);
+                    log.error("Getting new driver..");
+                    driver = getNewDriver();
+                    driver.get(settingDTO.getWebPageUrl());
+                    firstRun = true;
+                } catch (NoResultException e) {
+                    log.error("ERROR SL006 - No Result Exception", e);
+                    currentNumber = currentNumber + recordSize;
+                } catch (Exception e) {
+                    log.error("ERROR SL007 - Exception", e);
+                    currentNumber = currentNumber + recordSize;
+                }
+                TimeUnit.SECONDS.sleep(fairDuration);
+            }
+
+            settingPoolDTO.setStatus(SettingPoolStatus.PROCESSED.name());
+            updatePool(settingPoolDTO);
+        } // End of infinite loop
+
+    }
+
+    /**
+     * @throws Exception
+     */
+    private void startProcess(String daire, int selection, String preDaire, int preSelection,
+                              String selectedYear, String startNumber, String endNumber,
+                              boolean firstRun, String fileSavePath, boolean downloadPdf, boolean saveTxt,
+                              WebDriver driver, boolean resolveCaptcha) throws
+            IOException, InterruptedException, CaptchaException {
+        JavascriptExecutor jsExecutor = (JavascriptExecutor) driver;
+        String path = System.getProperty("user.dir") + "/captcha.png";
+        if (solvedCaptcha == null || resolveCaptcha) {
+            for (int i = 0; i < 3; i++) {
+                log.info("Refreshing captcha..");
+                driver.findElement(By.id("aramaForm:refreshCapcha")).click();
+                TimeUnit.SECONDS.sleep(2);
+
+                File captchaSrc = driver.findElement(By.id("aramaForm:cptImg")).getScreenshotAs(OutputType.FILE);
+                FileHandler.copy(captchaSrc, new File(path));
+                solvedCaptcha = solveCaptcha(path);
+                if (solvedCaptcha != null)
+                    break;
+            }
+            if (solvedCaptcha == null) {
+                log.error("ERR-SP002 Captcha did not solved!");
+                throw new CaptchaException();
+            }
+        }
+
+        if (firstRun || resolveCaptcha) {
+            sendKeys("#aramaForm\\:guvenlikKodu", solvedCaptcha, driver, jsExecutor);
+
+            WebElement detayliAramaLink = driver.findElement(By.cssSelector("#aramaForm\\:detayliAramaCl"));
+            detayliAramaLink.click();
+            TimeUnit.SECONDS.sleep(1);
+        }
+
+        //Used to check if "DetayliAramaLink" is clicked.
+        WebElement kurulCombo = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
+        if (!kurulCombo.isDisplayed()) {
+            WebElement detayliAramaLink = driver.findElement(By.cssSelector("#aramaForm\\:detayliAramaCl"));
+            detayliAramaLink.click();
+            TimeUnit.SECONDS.sleep(1);
+        }
+
+        //Unselect previous selected combobox item.
+        if (preSelection != -1) {
+            if (DefinitionType.KURUL.name().equals(preDaire)) {
+                WebElement kurullar = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
+                kurullar.click();
+
+                List<WebElement> kurullarList = driver.findElements(By.cssSelector("#aramaForm\\:kurulCombo_panel li.ui-selectcheckboxmenu-item"));
+                kurullarList.get(preSelection).click();
+            } else if (DefinitionType.CEZA_DAIRESI.name().equals(preDaire)) {
+                WebElement cezaDaire = driver.findElement(By.cssSelector("#aramaForm\\:cezaDaireCombo"));
+                cezaDaire.click();
+
+                List<WebElement> cezaDaireList = driver.findElements(By.cssSelector("#aramaForm\\:cezaDaireCombo_panel li.ui-selectcheckboxmenu-item"));
+                cezaDaireList.get(preSelection).click();
+            } else if (DefinitionType.HUKUK_DAIRESI.name().equals(preDaire)) {
+                WebElement hukukDaire = driver.findElement(By.cssSelector("#aramaForm\\:hukukDaireCombo"));
+                hukukDaire.click();
+
+                List<WebElement> hukukDaireList = driver.findElements(By.cssSelector("#aramaForm\\:hukukDaireCombo_panel li.ui-selectcheckboxmenu-item"));
+                hukukDaireList.get(preSelection).click();
+            }
+            TimeUnit.SECONDS.sleep(1);
+        }
+
+        //Select new item from combo box
+        if (DefinitionType.KURUL.name().equals(daire)) {
+            WebElement kurullar = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
+            kurullar.click();
+
+            List<WebElement> kurullarList = driver.findElements(By.cssSelector("#aramaForm\\:kurulCombo_panel li.ui-selectcheckboxmenu-item"));
+            kurullarList.get(selection).click();
+            kurullar.click();
+        } else if (DefinitionType.CEZA_DAIRESI.name().equals(daire)) {
+            WebElement cezaDaire = driver.findElement(By.cssSelector("#aramaForm\\:cezaDaireCombo"));
+            cezaDaire.click();
+
+            List<WebElement> cezaDaireList = driver.findElements(By.cssSelector("#aramaForm\\:cezaDaireCombo_panel li.ui-selectcheckboxmenu-item"));
+            cezaDaireList.get(selection).click();
+            cezaDaire.click();
+        } else if (DefinitionType.HUKUK_DAIRESI.name().equals(daire)) {
+            WebElement hukukDaire = driver.findElement(By.cssSelector("#aramaForm\\:hukukDaireCombo"));
+            hukukDaire.click();
+
+            List<WebElement> hukukDaireList = driver.findElements(By.cssSelector("#aramaForm\\:hukukDaireCombo_panel li.ui-selectcheckboxmenu-item"));
+            hukukDaireList.get(selection).click();
+            hukukDaire.click();
+        }
+        TimeUnit.SECONDS.sleep(1);
+
+        sendKeys("#aramaForm\\:karaYilInput", selectedYear, driver, jsExecutor);
+        TimeUnit.SECONDS.sleep(1);
+
+        sendKeys("#aramaForm\\:ilkKararNoInput", startNumber, driver, jsExecutor);
+        TimeUnit.SECONDS.sleep(1);
+
+        sendKeys("#aramaForm\\:sonKararNoInput", endNumber, driver, jsExecutor);
+        TimeUnit.SECONDS.sleep(1);
+
+        driver.findElement(By.cssSelector("label[for='aramaForm:siralamaKriteri:1']")).click();
+        TimeUnit.SECONDS.sleep(1);
+
+        WebElement ara = driver.findElement(By.cssSelector("#aramaForm\\:detayliAraCommandButton"));
+        ara.click();
+        TimeUnit.SECONDS.sleep(5);
+
+        //Check form errors..
+        boolean isCaptchaError = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Güvenlik Kodunu Kontrol Ediniz!");
+        if (isCaptchaError)
+            throw new CaptchaException();
+        boolean isSearchParamError = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Aranacak Kavram Boş Olamaz!");
+        if (isSearchParamError)
+            throw new ValidationException();
+        boolean isNoResult = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Sonuç Bulunamadı!");
+        if (isNoResult)
+            throw new NoResultException();
+
+        List<WebElement> sonucButtonList = driver.findElements(By.cssSelector("button[id$='rowbtn']"));
+        if (!sonucButtonList.isEmpty()) {
+            WebElement button = sonucButtonList.get(0);
+            button.click();
+            TimeUnit.SECONDS.sleep(3);
+
+            for (int i = 0; i < maxDocumentCount; i++) {
+                if (i != 0) {
+                    WebElement sonrakiEvrakLink;
+                    try {
+                        sonrakiEvrakLink = driver.findElement(By.cssSelector("#aramaForm\\:sonrakiEvrakLabel"));
+                    } catch (Exception e) {
+                        log.error("ERROR-SP003 Error with sonrakiEvrakLink");
+                        log.error("ERROR-SP003 Error Detail", e);
+                        sonrakiEvrakLink = null;
+
+                        List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
+                        for (WebElement closeButton : dialogCloseButtons) {
+                            try {
+                                closeButton.click();
+                            } catch (Exception e1) {
+                                log.error("ERROR-SP004 Error with dialog close button");
+                                log.error("ERROR-SP004 Error Detail", e1);
+                                //do nothing..
+                            }
+                        }
+                    }
+
+                    if (sonrakiEvrakLink == null || sonrakiEvrakLink.getAttribute("class").contains("disabled")) {
+                        break;
+                    }
+
+                    try {
+                        sonrakiEvrakLink.click();
+                        TimeUnit.SECONDS.sleep(5);
+                    } catch (Exception e) {
+                        break;
+                    }
+                }
+
+                if (downloadPdf) {
+                    WebElement pdfLink = driver.findElement(By.cssSelector("#aramaForm\\:pdfOlusturCmd > img"));
+                    pdfLink.click();
+                    TimeUnit.SECONDS.sleep(1);
+                }
+
+                WebElement content = driver.findElement(By.cssSelector("#aramaForm\\:karakIcerikPanel"));
+                String contentStr = content.getText();
+                String[] contentStrLines = contentStr.split("\\R", 2);
+                String fileName = contentStrLines[0];
+                fileName = fileName.substring(0, Math.min(fileName.length(), 250));
+
+                if (saveTxt) {
+                    writeToFile(fileSavePath + "\\\\" + sanitizeFilename(fileName) + ".txt", contentStr);
+                }
+
+                DocumentDTO documentDTO = new DocumentDTO();
+                documentDTO.setDocumentData(contentStr.getBytes(StandardCharsets.UTF_8));
+                documentDTO.setDocumentName(fileName);
+                documentDTO.setVerdictYear(Integer.parseInt(selectedYear));
+                documentDTO.setDefinitionType(daire);
+                sendDocument(documentDTO);
+
+            }
+
+
+            List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
+            for (WebElement closeButton : dialogCloseButtons) {
+                try {
+                    closeButton.click();
+                } catch (Exception e) {
+                    //do nothing..
+                }
+            }
+        }
+        TimeUnit.SECONDS.sleep(fairDuration);
+
+    }
+
+
+    /**
+     * @param elementCssSelector
+     * @param value
+     * @return
+     * @throws InterruptedException
+     */
+    private void sendKeys(String elementCssSelector, String value, WebDriver webDriver, JavascriptExecutor jsExecutor) throws InterruptedException {
+        WebElement element = webDriver.findElement(By.cssSelector(elementCssSelector));
+        try {
+            element.click();
+            element.clear();
+        } catch (Exception e) {
+            element = webDriver.findElement(By.cssSelector(elementCssSelector));
+            element.click();
+            element.clear();
+        }
+        TimeUnit.SECONDS.sleep(1);
+
+        try {
+            if (!element.getText().isEmpty()) {
+                element.click();
+                element.clear();
+                TimeUnit.SECONDS.sleep(1);
+            }
+        } catch (Exception e) {
+            element = webDriver.findElement(By.cssSelector(elementCssSelector));
+            element.click();
+            element.clear();
+            TimeUnit.SECONDS.sleep(1);
+        }
+
+        try {
+            element.click();
+        } catch (Exception e) {
+            element = webDriver.findElement(By.cssSelector(elementCssSelector));
+            element.click();
+        }
+        TimeUnit.SECONDS.sleep(1);
+
+        try {
+            element.sendKeys(value);
+        } catch (Exception e) {
+            element = webDriver.findElement(By.cssSelector(elementCssSelector));
+            element.sendKeys(value);
+        }
+        jsExecutor.executeScript("$(arguments[0]).change();", element);
+
+    }
+
+
+    /**
+     * @param file
+     * @param content
+     */
+    private void writeToFile(String file, String content) {
+        FileWriter myWriter = null;
+        try {
+            myWriter = new FileWriter(file);
+            myWriter.write(content);
+
+        } catch (IOException e) {
+            log.error("Error while writing to file!");
+            log.error("Error Detail:", e);
+        } finally {
+            try {
+                myWriter.close();
+            } catch (IOException e) {
+                log.error("Error while closing file!");
+                log.error("Error Detail:", e);
+            }
+        }
+    }
+
+    /**
+     * @param inputName
+     * @return
+     */
+    private String sanitizeFilename(String inputName) {
+        return inputName.replaceAll("[^a-zA-Z0-9-_\\.]", "_");
+    }
+
 
     /**
      * Call captcha service to solve captcha.
@@ -235,321 +572,32 @@ public class CrobotWorker {
         }
     }
 
-
     /**
-     * @throws InterruptedException
-     * @throws IOException
-     */
-    private void startLoop(boolean downloadPdf, boolean saveTxt) throws InterruptedException, IOException {
-        SettingDTO settingDTO = getSettings();
-        if (settingDTO == null || settingDTO.getWebPageUrl() == null) {
-            log.error("ERROR SL001 Could not found settings..");
-            return;
-        }
-        String fileSavePath = AppProperties.getInstance().getProperty("file.save.path");
-
-        this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
-        driver.get(settingDTO.getWebPageUrl());
-        TimeUnit.SECONDS.sleep(this.fairDuration);
-
-        // TODO: NEED LOOP
-
-        SettingPoolDTO settingPoolDTO = fetchOneFromPool();
-        if (settingPoolDTO == null) {
-            log.error("ERROR SL002 There no SettingPool record!");
-            return;
-        }
-
-        String daire = settingPoolDTO.getDefinitionType();
-        int selection = settingPoolDTO.getOrderNumber();
-        int verdictYear = settingPoolDTO.getYear();
-        int verdictNoStart = settingPoolDTO.getVerdictNoStart();
-        int verdictNoEnd = settingPoolDTO.getVerdictNoEnd();
-
-        boolean firstRun = true;
-        int recordSize = 37;
-        int difference = verdictNoEnd % recordSize;
-        int currentNumber = verdictNoStart;
-        while (currentNumber <= verdictNoEnd + difference) {
-            try {
-                startProcess(daire, selection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt);
-                firstRun = false;
-            } catch (CaptchaException e) {
-                log.error("ERROR SL003 Captcha error. Renewing request..");
-                startProcess(daire, selection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt);
-                firstRun = false;
-            } catch (ValidationException e) {
-                log.error("ERROR SL004 Form validation error. Renewing request..");
-                startProcess(daire, selection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt);
-                firstRun = false;
-            } catch (Exception e) {
-                log.error("ERROR SL005 Exception", e);
-            }
-            currentNumber = currentNumber + recordSize;
-        }
-
-        settingPoolDTO.setStatus(SettingPoolStatus.PROCESSED.name());
-        updatePool(settingPoolDTO);
-
-
-    }
-
-    /**
-     * @throws Exception
-     */
-    private void startProcess(String daire, int selection, String selectedYear, String startNumber, String endNumber,
-                              boolean firstRun, String fileSavePath, boolean downloadPdf, boolean saveTxt) throws
-            IOException, InterruptedException, CaptchaException {
-        JavascriptExecutor jsExcecutor = (JavascriptExecutor) driver;
-        Integer preSelection = null;
-
-        String path = System.getProperty("user.dir") + "/captcha.png";
-        if (solvedCaptcha == null) {
-            for (int i = 0; i < 3; i++) {
-                File captchaSrc = driver.findElement(By.id("aramaForm:cptImg")).getScreenshotAs(OutputType.FILE);
-                FileHandler.copy(captchaSrc, new File(path));
-                solvedCaptcha = solveCaptcha(path);
-                if (solvedCaptcha != null) {
-                    break;
-                } else {
-                    log.error("ERR-SP001 Captcha did not solved! Refreshing captcha and trying again..");
-                    driver.findElement(By.id("aramaForm:refreshCapcha")).click();
-                    TimeUnit.SECONDS.sleep(2);
-                }
-            }
-            if (solvedCaptcha == null)
-                log.error("ERR-SP002 Captcha did not solved!");
-        }
-
-        if (firstRun) {
-            WebElement guvenlikKodu = driver.findElement(By.cssSelector("#aramaForm\\:guvenlikKodu"));
-            guvenlikKodu.clear();
-            guvenlikKodu.sendKeys(solvedCaptcha);
-            jsExcecutor.executeScript("$(arguments[0]).change();", guvenlikKodu);
-            TimeUnit.SECONDS.sleep(1);
-
-            WebElement detayliAramaLink = driver.findElement(By.cssSelector("#aramaForm\\:detayliAramaCl"));
-            detayliAramaLink.click();
-            TimeUnit.SECONDS.sleep(1);
-        }
-
-        WebElement kurulCombo = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
-        if (!kurulCombo.isDisplayed()) {
-            WebElement detayliAramaLink = driver.findElement(By.cssSelector("#aramaForm\\:detayliAramaCl"));
-            detayliAramaLink.click();
-            TimeUnit.SECONDS.sleep(1);
-        }
-
-        if (DefinitionType.KURUL.name().equals(daire)) {
-            WebElement kurullar = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
-            kurullar.click();
-
-            List<WebElement> kurullarList = driver.findElements(By.cssSelector("#aramaForm\\:kurulCombo_panel li.ui-selectcheckboxmenu-item"));
-
-            if (preSelection != null)
-                kurullarList.get(preSelection).click();
-            TimeUnit.MILLISECONDS.sleep(100);
-            kurullarList.get(selection).click();
-            kurullar.click();
-            preSelection = selection;
-        } else if (DefinitionType.CEZA_DAIRESI.name().equals(daire)) {
-            WebElement cezaDaire = driver.findElement(By.cssSelector("#aramaForm\\:cezaDaireCombo"));
-            cezaDaire.click();
-
-            List<WebElement> cezaDaireList = driver.findElements(By.cssSelector("#aramaForm\\:cezaDaireCombo_panel li.ui-selectcheckboxmenu-item"));
-
-            if (preSelection != null)
-                cezaDaireList.get(preSelection).click();
-            TimeUnit.MILLISECONDS.sleep(100);
-            cezaDaireList.get(selection).click();
-            cezaDaire.click();
-            preSelection = selection;
-        } else if (DefinitionType.HUKUK_DAIRESI.name().equals(daire)) {
-            WebElement hukukDaire = driver.findElement(By.cssSelector("#aramaForm\\:hukukDaireCombo"));
-            hukukDaire.click();
-
-            List<WebElement> hukukDaireList = driver.findElements(By.cssSelector("#aramaForm\\:hukukDaireCombo_panel li.ui-selectcheckboxmenu-item"));
-
-            if (preSelection != null)
-                hukukDaireList.get(preSelection).click();
-            TimeUnit.MILLISECONDS.sleep(100);
-            hukukDaireList.get(selection).click();
-            hukukDaire.click();
-            preSelection = selection;
-        }
-
-        sendKeys("#aramaForm\\:karaYilInput", selectedYear, driver, jsExcecutor);
-        TimeUnit.SECONDS.sleep(1);
-
-        sendKeys("#aramaForm\\:ilkKararNoInput", startNumber, driver, jsExcecutor);
-        TimeUnit.SECONDS.sleep(1);
-
-        sendKeys("#aramaForm\\:sonKararNoInput", endNumber, driver, jsExcecutor);
-        TimeUnit.SECONDS.sleep(1);
-
-        driver.findElement(By.cssSelector("label[for='aramaForm:siralamaKriteri:1']")).click();
-        TimeUnit.SECONDS.sleep(1);
-
-        WebElement ara = driver.findElement(By.cssSelector("#aramaForm\\:detayliAraCommandButton"));
-        ara.click();
-        TimeUnit.SECONDS.sleep(5);
-
-        //Check form errors..
-        boolean isCaptchaError = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Güvenlik Kodunu Kontrol Ediniz!");
-        if (isCaptchaError)
-            throw new CaptchaException();
-        boolean isSearchParamError = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Aranacak Kavram Boş Olamaz!");
-        if (isSearchParamError)
-            throw new ValidationException();
-        boolean isNoResult = driver.findElement(By.cssSelector("#aramaForm\\:messages")).getText().contains("Sonuç Bulunamadı!");
-        if (isNoResult)
-            throw new NoResultException();
-
-
-        List<WebElement> sonucButtonList = driver.findElements(By.cssSelector("button[id$='rowbtn']"));
-        if (!sonucButtonList.isEmpty()) {
-            WebElement button = sonucButtonList.get(0);
-            button.click();
-            TimeUnit.SECONDS.sleep(3);
-            int controlCount = 1;
-
-            WebElement pdfLink = driver.findElement(By.cssSelector("#aramaForm\\:pdfOlusturCmd > img"));
-            if (pdfLink != null) {
-                pdfLink.click();
-                TimeUnit.SECONDS.sleep(1);
-
-                while (controlCount < 40) {
-                    controlCount++;
-                    WebElement sonrakiEvrakLink;
-                    try {
-                        sonrakiEvrakLink = driver.findElement(By.cssSelector("#aramaForm\\:sonrakiEvrakLabel"));
-                    } catch (Exception e) {
-                        log.error("ERROR-SP003 Error with sonrakiEvrakLink");
-                        log.error("ERROR-SP003 Error Detail", e);
-                        sonrakiEvrakLink = null;
-
-                        List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
-                        for (WebElement closeButton : dialogCloseButtons) {
-                            try {
-                                closeButton.click();
-                            } catch (Exception e1) {
-                                log.error("ERROR-SP004 Error with dialog close button");
-                                log.error("ERROR-SP004 Error Detail", e1);
-                                //do nothing..
-                            }
-                        }
-                    }
-
-                    if (sonrakiEvrakLink == null || sonrakiEvrakLink.getAttribute("class").contains("disabled")) {
-                        break;
-                    }
-
-                    try {
-                        sonrakiEvrakLink.click();
-                        TimeUnit.SECONDS.sleep(2);
-                    } catch (Exception e) {
-                        break;
-                    }
-
-                    pdfLink = driver.findElement(By.cssSelector("#aramaForm\\:pdfOlusturCmd > img"));
-                    pdfLink.click();
-                    TimeUnit.SECONDS.sleep(1);
-
-                    WebElement content = driver.findElement(By.cssSelector("#aramaForm\\:karakIcerikPanel"));
-                    String contentStr = content.getText();
-                    String[] contentStrLines = contentStr.split("\\R", 2);
-                    String fileName = contentStrLines[0];
-                    fileName = fileName.substring(0, Math.min(fileName.length(), 250));
-
-                    writeToFile(fileSavePath + "\\\\" + sanitizeFilename(fileName) + ".txt", contentStr);
-
-                    DocumentDTO documentDTO = new DocumentDTO();
-                    documentDTO.setDocumentData(contentStr.getBytes(StandardCharsets.UTF_8));
-                    documentDTO.setDocumentName(fileName);
-                    documentDTO.setVerdictYear(Integer.parseInt(selectedYear));
-                    documentDTO.setDefinitionType(daire);
-                    sendDocument(documentDTO);
-
-                }
-            }
-
-            List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
-            for (WebElement closeButton : dialogCloseButtons) {
-                try {
-                    closeButton.click();
-                } catch (Exception e) {
-                    //do nothing..
-                }
-            }
-        }
-        TimeUnit.SECONDS.sleep(fairDuration);
-
-    }
-
-    /**
-     * @param file
-     * @param content
-     */
-    private void writeToFile(String file, String content) {
-        FileWriter myWriter = null;
-        try {
-            myWriter = new FileWriter(file);
-            myWriter.write(content);
-
-        } catch (IOException e) {
-            log.error("Error while writing to file!");
-            log.error("Error Detail:", e);
-        } finally {
-            try {
-                myWriter.close();
-            } catch (IOException e) {
-                log.error("Error while closing file!");
-                log.error("Error Detail:", e);
-            }
-        }
-    }
-
-    /**
-     * @param inputName
+     * Returns new driver
+     *
      * @return
      */
-    private String sanitizeFilename(String inputName) {
-        return inputName.replaceAll("[^a-zA-Z0-9-_\\.]", "_");
+    private WebDriver getNewDriver() {
+        System.setProperty("webdriver.chrome.driver", AppProperties.getInstance().getProperty("webdriver.chrome.driver"));
+
+        ChromeOptions chromeOptions = new ChromeOptions();
+        chromeOptions.addArguments("--disable-notifications");
+        HashMap<String, Object> chromePrefs = new HashMap<>();
+        chromePrefs.put("profile.default_content_settings.popups", 0);
+
+        if (AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf"))
+            chromePrefs.put("download.default_directory", AppProperties.getInstance().getProperty("file.download.path"));
+
+        chromeOptions.setExperimentalOption("prefs", chromePrefs);
+        chromeOptions.setCapability(CapabilityType.ACCEPT_SSL_CERTS, true);
+        chromeOptions.addArguments("--start-maximized");
+
+        WebDriver webDriver = new ChromeDriver(chromeOptions);
+        webDriver.manage().timeouts().implicitlyWait(30, TimeUnit.SECONDS);
+
+        return webDriver;
     }
 
-    /**
-     * @param elementCssSelector
-     * @param value
-     * @return
-     * @throws InterruptedException
-     */
-    private WebElement sendKeys(String elementCssSelector, String value, WebDriver webDriver, JavascriptExecutor jsExcecutor) throws InterruptedException {
-        WebElement element = webDriver.findElement(By.cssSelector(elementCssSelector));
-        try {
-            element.click();
-            element.clear();
-        } catch (Exception e) {
-            element = webDriver.findElement(By.cssSelector(elementCssSelector));
-            element.click();
-            element.clear();
-        }
-        TimeUnit.MILLISECONDS.sleep(100);
-        try {
-            element.click();
-        } catch (Exception e) {
-            element = webDriver.findElement(By.cssSelector(elementCssSelector));
-            element.click();
-        }
-        TimeUnit.MILLISECONDS.sleep(100);
-        try {
-            element.sendKeys(value);
-        } catch (Exception e) {
-            element = webDriver.findElement(By.cssSelector(elementCssSelector));
-            element.sendKeys(value);
-        }
-        jsExcecutor.executeScript("$(arguments[0]).change();", element);
-        return element;
-    }
 
 }
 
