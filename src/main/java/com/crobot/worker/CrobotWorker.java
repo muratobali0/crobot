@@ -13,6 +13,7 @@ import com.crobot.http.ResponseContent;
 import com.crobot.page.DefinitionType;
 import com.crobot.page.SettingPoolStatus;
 import com.crobot.util.AppProperties;
+import com.crobot.util.PatternUtil;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -28,7 +29,6 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.ConnectException;
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -326,11 +326,22 @@ public class CrobotWorker {
                     writeToFile(fileSavePath + "\\\\" + sanitizeFilename(fileName) + ".txt", contentStr);
                 }
 
+                //Extract Verdict and Basis Numbers
+                Integer[] basis = PatternUtil.getEsas(contentStrLines[0]);
+                Integer[] verdict = PatternUtil.getKarar(contentStrLines[0]);
+
                 DocumentDTO documentDTO = new DocumentDTO();
                 documentDTO.setDocumentData(contentStr);
                 documentDTO.setDocumentName(fileName);
                 documentDTO.setVerdictYear(Integer.parseInt(selectedYear));
                 documentDTO.setDefinitionType(daire);
+                if(basis != null){
+                    documentDTO.setBasisYear(basis[0]);
+                    documentDTO.setBasisNo(basis[1]);
+                }
+                if(verdict != null){
+                    documentDTO.setVerdictNo(verdict[1]);
+                }
                 sendDocument(documentDTO);
 
             }

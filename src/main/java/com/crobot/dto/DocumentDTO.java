@@ -12,7 +12,15 @@ public class DocumentDTO implements Serializable {
 
     private Integer verdictYear;
 
+    private Integer verdictNo;
+
+    private Integer basisYear;
+
+    private Integer basisNo;
+
     private String definitionType;
 
     private String documentData;
+
+
 }
