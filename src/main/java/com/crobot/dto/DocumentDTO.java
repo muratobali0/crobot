@@ -14,5 +14,5 @@ public class DocumentDTO implements Serializable {
 
     private String definitionType;
 
-    private byte[] documentData;
+    private String documentData;
 }

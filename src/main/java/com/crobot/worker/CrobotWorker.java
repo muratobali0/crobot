@@ -327,7 +327,7 @@ public class CrobotWorker {
                 }
 
                 DocumentDTO documentDTO = new DocumentDTO();
-                documentDTO.setDocumentData(contentStr.getBytes(StandardCharsets.UTF_8));
+                documentDTO.setDocumentData(contentStr);
                 documentDTO.setDocumentName(fileName);
                 documentDTO.setVerdictYear(Integer.parseInt(selectedYear));
                 documentDTO.setDefinitionType(daire);
