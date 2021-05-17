@@ -59,6 +59,7 @@ public class CrobotGUI extends JFrame {
     private JTextField textFieldSaveTxtDir;
     private JButton buttonSaveTxt;
     private JCheckBox checkBoxSaveTxt;
+    private JLabel labelVersion;
     private String serverUrl;
     private String userName;
     private String password;
@@ -379,23 +380,23 @@ public class CrobotGUI extends JFrame {
         panelMain = new JPanel();
         panelMain.setLayout(new BorderLayout(0, 0));
         panelMainHeader = new JPanel();
-        panelMainHeader.setLayout(new FormLayout("fill:d:noGrow", "center:d:noGrow"));
+        panelMainHeader.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
         panelMain.add(panelMainHeader, BorderLayout.NORTH);
         labelHeader = new JLabel();
         labelHeader.setBackground(new Color(-10789208));
-        Font labelHeaderFont = this.$$$getFont$$$(null, Font.BOLD, 16, labelHeader.getFont());
+        Font labelHeaderFont = this.$$$getFont$$$(null, Font.BOLD, 20, labelHeader.getFont());
         if (labelHeaderFont != null) labelHeader.setFont(labelHeaderFont);
         labelHeader.setHorizontalAlignment(0);
         labelHeader.setHorizontalTextPosition(0);
         labelHeader.setText("Crobot");
-        CellConstraints cc = new CellConstraints();
-        panelMainHeader.add(labelHeader, cc.xy(1, 1, CellConstraints.FILL, CellConstraints.DEFAULT));
+        panelMainHeader.add(labelHeader);
         panelMainBody = new JPanel();
         panelMainBody.setLayout(new FormLayout("fill:d:noGrow,left:4dlu:noGrow,fill:d:grow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow", "center:d:noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:d:grow"));
         panelMain.add(panelMainBody, BorderLayout.CENTER);
         panelMainBody.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Settings", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         labelServerAddress = new JLabel();
         labelServerAddress.setText("Server Address");
+        CellConstraints cc = new CellConstraints();
         panelMainBody.add(labelServerAddress, cc.xy(1, 1));
         labelUsername = new JLabel();
         labelUsername.setText("Username");
@@ -447,7 +448,7 @@ public class CrobotGUI extends JFrame {
         buttonTestConnection.setText("Test Connection");
         panelMainBody.add(buttonTestConnection, cc.xy(3, 9));
         panelMainFooter = new JPanel();
-        panelMainFooter.setLayout(new FormLayout("fill:d:grow,left:4dlu:noGrow,fill:d:grow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow", "center:d:noGrow"));
+        panelMainFooter.setLayout(new FormLayout("fill:d:grow,left:4dlu:noGrow,fill:d:grow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow", "center:d:noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow"));
         panelMain.add(panelMainFooter, BorderLayout.SOUTH);
         buttonStart = new JButton();
         buttonStart.setText("Start");
@@ -463,9 +464,12 @@ public class CrobotGUI extends JFrame {
         buttonClose.setText("Close");
         panelMainFooter.add(buttonClose, cc.xy(9, 1));
         final com.intellij.uiDesigner.core.Spacer spacer1 = new com.intellij.uiDesigner.core.Spacer();
-        panelMainFooter.add(spacer1, cc.xy(3, 1, CellConstraints.FILL, CellConstraints.DEFAULT));
-        final com.intellij.uiDesigner.core.Spacer spacer2 = new com.intellij.uiDesigner.core.Spacer();
-        panelMainFooter.add(spacer2, cc.xy(11, 1, CellConstraints.DEFAULT, CellConstraints.FILL));
+        panelMainFooter.add(spacer1, cc.xywh(11, 1, 1, 3, CellConstraints.DEFAULT, CellConstraints.FILL));
+        labelVersion = new JLabel();
+        labelVersion.setHorizontalAlignment(0);
+        labelVersion.setHorizontalTextPosition(0);
+        labelVersion.setText("Version 1.0");
+        panelMainFooter.add(labelVersion, cc.xyw(1, 3, 9, CellConstraints.CENTER, CellConstraints.DEFAULT));
     }
 
     /**
