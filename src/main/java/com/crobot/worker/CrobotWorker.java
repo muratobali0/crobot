@@ -5,6 +5,7 @@ import com.crobot.dto.SettingDTO;
 import com.crobot.dto.SettingPoolDTO;
 import com.crobot.exception.CaptchaException;
 import com.crobot.exception.NoResultException;
+import com.crobot.exception.TooManyResultException;
 import com.crobot.exception.ValidationException;
 import com.crobot.http.CaptchaRequestDTO;
 import com.crobot.http.CaptchaResponseDTO;
@@ -106,6 +107,7 @@ public class CrobotWorker {
 
             String daire = settingPoolDTO.getDefinitionType();
             int selection = settingPoolDTO.getOrderNumber();
+            Long definitionId = settingPoolDTO.getDefinitionId();
             int verdictYear = settingPoolDTO.getYear();
             int verdictNoStart = settingPoolDTO.getVerdictNoStart();
             int verdictNoEnd = settingPoolDTO.getVerdictNoEnd();
@@ -116,7 +118,7 @@ public class CrobotWorker {
             int currentNumber = verdictNoStart;
             while (currentNumber <= verdictNoEnd + difference) {
                 try {
-                    startProcess(daire, selection, preDaire, preSelection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt, driver, resolveCaptcha);
+                    startProcess(daire, selection, definitionId, preDaire, preSelection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt, driver, resolveCaptcha);
                     preDaire = daire;
                     preSelection = selection;
                     firstRun = false;
@@ -127,18 +129,20 @@ public class CrobotWorker {
                     resolveCaptcha = true;
                 } catch (ValidationException e) {
                     log.error("ERROR SL004 - Form validation error. Renewing request..");
+                } catch (TooManyResultException e) {
+                    log.error("ERROR SL005 - Too many result error. Renewing request..");
                 } catch (ConnectException | WebDriverException e) {
-                    log.error("ERROR SL005 - ConnectException | WebDriverException", e);
+                    log.error("ERROR SL006 - ConnectException | WebDriverException", e);
                     TimeUnit.SECONDS.sleep(3);
                     log.error("Getting new driver..");
                     driver = getNewDriver();
                     driver.get(settingDTO.getWebPageUrl());
                     firstRun = true;
                 } catch (NoResultException e) {
-                    log.error("ERROR SL006 - No Result Exception", e);
+                    log.error("ERROR SL007 - No Result Exception", e);
                     currentNumber = currentNumber + recordSize;
                 } catch (Exception e) {
-                    log.error("ERROR SL007 - Exception", e);
+                    log.error("ERROR SL008 - Exception", e);
                     currentNumber = currentNumber + recordSize;
                 }
                 TimeUnit.SECONDS.sleep(fairDuration);
@@ -153,7 +157,7 @@ public class CrobotWorker {
     /**
      * @throws Exception
      */
-    private void startProcess(String daire, int selection, String preDaire, int preSelection,
+    private void startProcess(String daire, int selection, Long definitionId, String preDaire, int preSelection,
                               String selectedYear, String startNumber, String endNumber,
                               boolean firstRun, String fileSavePath, boolean downloadPdf, boolean saveTxt,
                               WebDriver driver, boolean resolveCaptcha) throws
@@ -272,6 +276,9 @@ public class CrobotWorker {
 
         List<WebElement> sonucButtonList = driver.findElements(By.cssSelector("button[id$='rowbtn']"));
         if (!sonucButtonList.isEmpty()) {
+            if(sonucButtonList.size() > 50)
+                throw new TooManyResultException();
+
             WebElement button = sonucButtonList.get(0);
             button.click();
             TimeUnit.SECONDS.sleep(3);
@@ -335,6 +342,7 @@ public class CrobotWorker {
                 documentDTO.setDocumentName(fileName);
                 documentDTO.setVerdictYear(Integer.parseInt(selectedYear));
                 documentDTO.setDefinitionType(daire);
+                documentDTO.setDefinitionId(definitionId);
                 if(basis != null){
                     documentDTO.setBasisYear(basis[0]);
                     documentDTO.setBasisNo(basis[1]);

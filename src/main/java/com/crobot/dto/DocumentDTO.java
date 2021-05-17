@@ -20,6 +20,8 @@ public class DocumentDTO implements Serializable {
 
     private String definitionType;
 
+    private Long definitionId;
+
     private String documentData;
 
 

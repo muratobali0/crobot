@@ -12,6 +12,8 @@ public class SettingPoolDTO implements Serializable {
 
     private String definitionType;
 
+    private Long definitionId;
+
     private Integer orderNumber;
 
     private Integer year;
