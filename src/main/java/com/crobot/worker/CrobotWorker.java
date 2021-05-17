@@ -46,11 +46,19 @@ public class CrobotWorker {
     private String userName;
     private String password;
     private Integer fairDuration = 20;
+    private String downloadDir;
+    private boolean isDownload;
+    private String saveTxtDir;
+    private boolean isSaveTxt;
 
-    public CrobotWorker(String serverUrl, String userName, String password) {
+    public CrobotWorker(String serverUrl, String userName, String password, String downloadDir, boolean isDownload, String saveTxtDir, boolean isSaveTxt) {
         this.serverUrl = serverUrl;
         this.userName = userName;
         this.password = password;
+        this.downloadDir = downloadDir;
+        this.isDownload = isDownload;
+        this.saveTxtDir = saveTxtDir;
+        this.isSaveTxt = isSaveTxt;
         log.info("Created CrobotWorker.");
     }
 
@@ -81,9 +89,9 @@ public class CrobotWorker {
      * @throws IOException
      */
     private void startLoop(WebDriver driver) throws InterruptedException {
-        boolean downloadPdf = AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf");
-        boolean saveTxt = AppProperties.getInstance().getPropertyAsBoolean("file.save.txt");
-        String fileSavePath = AppProperties.getInstance().getProperty("file.save.path");
+        boolean downloadPdf = this.isDownload;//AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf");
+        boolean saveTxt = this.isSaveTxt; //AppProperties.getInstance().getPropertyAsBoolean("file.save.txt");
+        String fileSavePath = this.saveTxtDir; //AppProperties.getInstance().getProperty("file.save.path");
         String preDaire = "";
         int preSelection = -1;
 
@@ -602,8 +610,11 @@ public class CrobotWorker {
         HashMap<String, Object> chromePrefs = new HashMap<>();
         chromePrefs.put("profile.default_content_settings.popups", 0);
 
-        if (AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf"))
-            chromePrefs.put("download.default_directory", AppProperties.getInstance().getProperty("file.download.path"));
+        if(this.isDownload)
+            chromePrefs.put("download.default_directory", this.downloadDir);
+
+//        if (AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf"))
+//            chromePrefs.put("download.default_directory", AppProperties.getInstance().getProperty("file.download.path"));
 
         chromeOptions.setExperimentalOption("prefs", chromePrefs);
         chromeOptions.setCapability(CapabilityType.ACCEPT_SSL_CERTS, true);

@@ -17,7 +17,10 @@ import javax.swing.plaf.FontUIResource;
 import javax.swing.text.StyleContext;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -48,9 +51,21 @@ public class CrobotGUI extends JFrame {
     private JLabel labelHelpServerAddress;
     private JScrollPane jScrollPaneStaus;
     private JTextArea textAreaStatus;
+    private JLabel labelDownloadDir;
+    private JTextField textFieldDownloadDir;
+    private JButton buttonDownloadDir;
+    private JCheckBox checkBoxDownload;
+    private JLabel labelSaveAsTxt;
+    private JTextField textFieldSaveTxtDir;
+    private JButton buttonSaveTxt;
+    private JCheckBox checkBoxSaveTxt;
     private String serverUrl;
     private String userName;
     private String password;
+    private String downloadDir;
+    private boolean isDownload;
+    private String saveTxtDir;
+    private boolean isSaveTxt;
     private GetDocumentsTask getDocumentsTask;
 
     /**
@@ -70,6 +85,7 @@ public class CrobotGUI extends JFrame {
         //setExtendedState(Frame.ICONIFIED);
         setFrameIcon();
 
+
     }
 
     /**
@@ -84,10 +100,36 @@ public class CrobotGUI extends JFrame {
 
         buttonClose.addActionListener(new ExitAction());
 
+        buttonDownloadDir.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent actionEvent) {
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setDialogTitle("Directory For PDF");
+                fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                int returnValue = fileChooser.showOpenDialog(panelMain);
+                if (returnValue == JFileChooser.APPROVE_OPTION) {
+                    textFieldDownloadDir.setText(fileChooser.getSelectedFile().getPath());
+                }
+            }
+        });
+
+        buttonSaveTxt.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setDialogTitle("Directory For TXT");
+                fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                int returnValue = fileChooser.showOpenDialog(panelMain);
+                if (returnValue == JFileChooser.APPROVE_OPTION) {
+                    textFieldSaveTxtDir.setText(fileChooser.getSelectedFile().getPath());
+                }
+            }
+        });
+
         buttonStart.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent actionEvent) {
-              startProcess();
+                startProcess();
             }
         });
         buttonStop.addActionListener(new ActionListener() {
@@ -109,6 +151,16 @@ public class CrobotGUI extends JFrame {
     }
 
     private void startProcess() {
+        this.isDownload = checkBoxDownload.isSelected();
+        this.downloadDir = textFieldDownloadDir.getText();
+        if (isDownload && !isDirectory(this.downloadDir))
+            return;
+
+        this.isSaveTxt = checkBoxSaveTxt.isSelected();
+        this.saveTxtDir = textFieldSaveTxtDir.getText();
+        if (isSaveTxt && !isDirectory(this.saveTxtDir))
+            return;
+
         textAreaStatus.append("\nChecking server connection..");
         boolean isTestOK = testServerConnection(true);
         if (isTestOK) {
@@ -176,6 +228,20 @@ public class CrobotGUI extends JFrame {
                     JOptionPane.ERROR_MESSAGE);
         }
         return false;
+    }
+
+    /**
+     * @param dirPath
+     */
+    private boolean isDirectory(String dirPath) {
+        Path file = new File(dirPath).toPath();
+        if (!Files.isDirectory(file)) {
+            JOptionPane.showMessageDialog(this, "Invalid directory\n" + dirPath,
+                    "Invalid Directory",
+                    JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -325,9 +391,9 @@ public class CrobotGUI extends JFrame {
         CellConstraints cc = new CellConstraints();
         panelMainHeader.add(labelHeader, cc.xy(1, 1, CellConstraints.FILL, CellConstraints.DEFAULT));
         panelMainBody = new JPanel();
-        panelMainBody.setLayout(new FormLayout("fill:d:noGrow,left:4dlu:noGrow,fill:d:grow", "center:d:noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:d:grow"));
+        panelMainBody.setLayout(new FormLayout("fill:d:noGrow,left:4dlu:noGrow,fill:d:grow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow", "center:d:noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:max(d;4px):noGrow,top:4dlu:noGrow,center:d:grow"));
         panelMain.add(panelMainBody, BorderLayout.CENTER);
-        panelMainBody.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Server", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
+        panelMainBody.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Settings", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         labelServerAddress = new JLabel();
         labelServerAddress.setText("Server Address");
         panelMainBody.add(labelServerAddress, cc.xy(1, 1));
@@ -343,19 +409,43 @@ public class CrobotGUI extends JFrame {
         labelPassword = new JLabel();
         labelPassword.setText("Password");
         panelMainBody.add(labelPassword, cc.xy(1, 7));
-        buttonTestConnection = new JButton();
-        buttonTestConnection.setText("Test Connection");
-        panelMainBody.add(buttonTestConnection, cc.xy(3, 9));
         labelHelpServerAddress = new JLabel();
         labelHelpServerAddress.setText("Ex: http://localhost:8090");
-        panelMainBody.add(labelHelpServerAddress, cc.xy(3, 3));
+        panelMainBody.add(labelHelpServerAddress, cc.xyw(3, 3, 5));
         jScrollPaneStaus = new JScrollPane();
         jScrollPaneStaus.setEnabled(true);
-        panelMainBody.add(jScrollPaneStaus, cc.xyw(1, 11, 3, CellConstraints.FILL, CellConstraints.FILL));
+        panelMainBody.add(jScrollPaneStaus, cc.xyw(1, 15, 7, CellConstraints.FILL, CellConstraints.FILL));
         jScrollPaneStaus.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Status", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         textAreaStatus = new JTextArea();
         textAreaStatus.setEditable(false);
         jScrollPaneStaus.setViewportView(textAreaStatus);
+        labelDownloadDir = new JLabel();
+        labelDownloadDir.setText("Download Dir");
+        panelMainBody.add(labelDownloadDir, cc.xy(1, 11));
+        textFieldDownloadDir = new JTextField();
+        panelMainBody.add(textFieldDownloadDir, cc.xy(3, 11, CellConstraints.FILL, CellConstraints.DEFAULT));
+        buttonDownloadDir = new JButton();
+        buttonDownloadDir.setIcon(new ImageIcon(getClass().getResource("/icons/folder-16.png")));
+        buttonDownloadDir.setText("");
+        panelMainBody.add(buttonDownloadDir, cc.xy(5, 11));
+        checkBoxDownload = new JCheckBox();
+        checkBoxDownload.setText("Download Pdf");
+        panelMainBody.add(checkBoxDownload, cc.xy(7, 11));
+        labelSaveAsTxt = new JLabel();
+        labelSaveAsTxt.setText("Text Dir");
+        panelMainBody.add(labelSaveAsTxt, cc.xy(1, 13));
+        textFieldSaveTxtDir = new JTextField();
+        panelMainBody.add(textFieldSaveTxtDir, cc.xy(3, 13, CellConstraints.FILL, CellConstraints.DEFAULT));
+        buttonSaveTxt = new JButton();
+        buttonSaveTxt.setIcon(new ImageIcon(getClass().getResource("/icons/folder-16.png")));
+        buttonSaveTxt.setText("");
+        panelMainBody.add(buttonSaveTxt, cc.xy(5, 13));
+        checkBoxSaveTxt = new JCheckBox();
+        checkBoxSaveTxt.setText("Save As Txt");
+        panelMainBody.add(checkBoxSaveTxt, cc.xy(7, 13));
+        buttonTestConnection = new JButton();
+        buttonTestConnection.setText("Test Connection");
+        panelMainBody.add(buttonTestConnection, cc.xy(3, 9));
         panelMainFooter = new JPanel();
         panelMainFooter.setLayout(new FormLayout("fill:d:grow,left:4dlu:noGrow,fill:d:grow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow,left:4dlu:noGrow,fill:max(d;4px):noGrow", "center:d:noGrow"));
         panelMain.add(panelMainFooter, BorderLayout.SOUTH);
@@ -414,7 +504,7 @@ public class CrobotGUI extends JFrame {
         @Override
         protected Void doInBackground() {
             textAreaStatus.append("\nPlease wait while processing..");
-            CrobotWorker crobotWorker = new CrobotWorker(serverUrl, userName, password);
+            CrobotWorker crobotWorker = new CrobotWorker(serverUrl, userName, password, downloadDir, isDownload, saveTxtDir, isSaveTxt);
             try {
                 crobotWorker.start();
             } catch (InterruptedException e) {
