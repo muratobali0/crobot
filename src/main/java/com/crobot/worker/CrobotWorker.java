@@ -106,7 +106,7 @@ public class CrobotWorker {
         TimeUnit.SECONDS.sleep(5);
 
         //TODO: NEED CONTROLLED INFINITE LOOP
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 10000; i++) {
             SettingPoolDTO settingPoolDTO = fetchOneFromPool();
             if (settingPoolDTO == null) {
                 log.error("ERROR SL002 There no SettingPool record!");
@@ -126,7 +126,7 @@ public class CrobotWorker {
             int currentNumber = verdictNoStart;
             while (currentNumber <= verdictNoEnd + difference) {
                 try {
-                    startProcess(daire, selection, definitionId, preDaire, preSelection, verdictYear + "", currentNumber + "", (currentNumber + recordSize) + "", firstRun, fileSavePath, downloadPdf, saveTxt, driver, resolveCaptcha);
+                    startProcess(daire, selection, definitionId, preDaire, preSelection, verdictYear + "", currentNumber + "", (currentNumber + recordSize - 1) + "", firstRun, fileSavePath, downloadPdf, saveTxt, driver, resolveCaptcha);
                     preDaire = daire;
                     preSelection = selection;
                     firstRun = false;
