@@ -5,7 +5,7 @@ import com.crobot.dto.SettingDTO;
 import com.crobot.dto.SettingPoolDTO;
 import com.crobot.exception.CaptchaException;
 import com.crobot.exception.NoResultException;
-import com.crobot.exception.TooManyResultException;
+import com.crobot.exception.TooManyPagesException;
 import com.crobot.exception.ValidationException;
 import com.crobot.http.CaptchaRequestDTO;
 import com.crobot.http.CaptchaResponseDTO;
@@ -137,8 +137,8 @@ public class CrobotWorker {
                     resolveCaptcha = true;
                 } catch (ValidationException e) {
                     log.error("ERROR SL004 - Form validation error. Renewing request..");
-                } catch (TooManyResultException e) {
-                    log.error("ERROR SL005 - Too many result error. Renewing request..");
+                } catch (TooManyPagesException e) {
+                    log.error("ERROR SL005 - Too many pages error. Renewing request..");
                 } catch (ConnectException | WebDriverException e) {
                     log.error("ERROR SL006 - ConnectException | WebDriverException", e);
                     TimeUnit.SECONDS.sleep(3);
@@ -284,8 +284,10 @@ public class CrobotWorker {
 
         List<WebElement> sonucButtonList = driver.findElements(By.cssSelector("button[id$='rowbtn']"));
         if (!sonucButtonList.isEmpty()) {
-            if(sonucButtonList.size() > 50)
-                throw new TooManyResultException();
+
+            List<WebElement> pageNumbers = driver.findElements(By.className("ui-paginator-page"));
+            if(pageNumbers.size()>4)
+                throw  new TooManyPagesException();
 
             WebElement button = sonucButtonList.get(0);
             button.click();
