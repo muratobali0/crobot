@@ -139,21 +139,30 @@ public class CrobotWorker {
                     log.error("ERROR SL004 - Form validation error. Renewing request..");
                 } catch (TooManyPagesException e) {
                     log.error("ERROR SL005 - Too many pages error. Renewing request..");
+                } catch (ElementClickInterceptedException e) {
+                    log.error("ERROR SL006 - Too many pages error. Renewing request..", e);
                 } catch (ConnectException | WebDriverException e) {
-                    log.error("ERROR SL006 - ConnectException | WebDriverException", e);
+                    log.error("ERROR SL007 - ConnectException | WebDriverException", e);
                     TimeUnit.SECONDS.sleep(3);
-                    log.error("Getting new driver..");
+                    log.info("Getting new driver..");
+                    preDaire = "";
+                    preSelection = -1;
+                    firstRun = true;
+                    resolveCaptcha = true;
                     driver = getNewDriver();
                     driver.get(settingDTO.getWebPageUrl());
-                    firstRun = true;
                 } catch (NoResultException e) {
-                    log.error("ERROR SL007 - No Result Exception", e);
+                    log.error("ERROR SL008 - No Result Exception");
+                    log.error("ERROR SL008 Details - Daire: " + daire + ", Selection: " + selection + ", firstRun: " + firstRun +", Verdict Year: "+verdictYear+ ", currentNumber: " + currentNumber);
+                    preDaire = daire;
+                    preSelection = selection;
+                    firstRun = false;
+                    resolveCaptcha = false;
                     currentNumber = currentNumber + recordSize;
                 } catch (Exception e) {
-                    log.error("ERROR SL008 - Exception", e);
+                    log.error("ERROR SL009 - Exception", e);
                     currentNumber = currentNumber + recordSize;
                 }
-                TimeUnit.SECONDS.sleep(fairDuration);
             }
 
             settingPoolDTO.setStatus(SettingPoolStatus.PROCESSED.name());
@@ -206,7 +215,7 @@ public class CrobotWorker {
             TimeUnit.SECONDS.sleep(1);
         }
 
-        //Unselect previous selected combobox item.
+        //Unselect previous selected combo box item.
         if (preSelection != -1) {
             if (DefinitionType.KURUL.name().equals(preDaire)) {
                 WebElement kurullar = driver.findElement(By.cssSelector("#aramaForm\\:kurulCombo"));
@@ -214,18 +223,21 @@ public class CrobotWorker {
 
                 List<WebElement> kurullarList = driver.findElements(By.cssSelector("#aramaForm\\:kurulCombo_panel li.ui-selectcheckboxmenu-item"));
                 kurullarList.get(preSelection).click();
+                kurullar.click();
             } else if (DefinitionType.CEZA_DAIRESI.name().equals(preDaire)) {
                 WebElement cezaDaire = driver.findElement(By.cssSelector("#aramaForm\\:cezaDaireCombo"));
                 cezaDaire.click();
 
                 List<WebElement> cezaDaireList = driver.findElements(By.cssSelector("#aramaForm\\:cezaDaireCombo_panel li.ui-selectcheckboxmenu-item"));
                 cezaDaireList.get(preSelection).click();
+                cezaDaire.click();
             } else if (DefinitionType.HUKUK_DAIRESI.name().equals(preDaire)) {
                 WebElement hukukDaire = driver.findElement(By.cssSelector("#aramaForm\\:hukukDaireCombo"));
                 hukukDaire.click();
 
                 List<WebElement> hukukDaireList = driver.findElements(By.cssSelector("#aramaForm\\:hukukDaireCombo_panel li.ui-selectcheckboxmenu-item"));
                 hukukDaireList.get(preSelection).click();
+                hukukDaire.click();
             }
             TimeUnit.SECONDS.sleep(1);
         }
@@ -286,8 +298,8 @@ public class CrobotWorker {
         if (!sonucButtonList.isEmpty()) {
 
             List<WebElement> pageNumbers = driver.findElements(By.className("ui-paginator-page"));
-            if(pageNumbers.size()>4)
-                throw  new TooManyPagesException();
+            if (pageNumbers.size() > 4)
+                throw new TooManyPagesException();
 
             WebElement button = sonucButtonList.get(0);
             button.click();
@@ -353,25 +365,35 @@ public class CrobotWorker {
                 documentDTO.setVerdictYear(Integer.parseInt(selectedYear));
                 documentDTO.setDefinitionType(daire);
                 documentDTO.setDefinitionId(definitionId);
-                if(basis != null){
+                if (basis != null) {
                     documentDTO.setBasisYear(basis[0]);
                     documentDTO.setBasisNo(basis[1]);
                 }
-                if(verdict != null){
+                if (verdict != null) {
                     documentDTO.setVerdictNo(verdict[1]);
                 }
                 sendDocument(documentDTO);
-
             }
 
+            log.debug("DEBUG SP001 - Out of loop. Looking for dialog close icon..");
             List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
+            log.debug("DEBUG SP002 - Got all close buttons.. Close Buttons: " + dialogCloseButtons.size());
+
             for (WebElement closeButton : dialogCloseButtons) {
                 try {
-                    closeButton.click();
+                    if(closeButton.isDisplayed() && closeButton.isEnabled()){
+                        log.debug("DEBUG SP003 - Clicking close button: "+closeButton.getText());
+                        closeButton.click();
+                        break;
+                    }
                 } catch (Exception e) {
+                    log.error("ERROR SP001 - Error while closing dialog window!", e);
                     //do nothing..
                 }
             }
+
+            log.info("Waiting fair duration: " + fairDuration + " seconds.");
+            TimeUnit.SECONDS.sleep(fairDuration);
         }
 
     }
@@ -592,7 +614,7 @@ public class CrobotWorker {
         ResponseContent responseContent = HttpClientUtil.getInstance().sendHttpPost(poolUrl, jsonDocumentDTO, headers, RequestConfig.DEFAULT, 1, 1);
 
         if (responseContent != null && responseContent.getResponseCode() == HttpStatus.SC_OK) {
-            log.info("Document sent.");
+            log.info("Document is sent.");
         } else {
             log.error("Error while sending document!");
             log.error(responseContent == null ? "ResponseContent is null!" : responseContent.toString());
@@ -612,7 +634,7 @@ public class CrobotWorker {
         HashMap<String, Object> chromePrefs = new HashMap<>();
         chromePrefs.put("profile.default_content_settings.popups", 0);
 
-        if(this.isDownload)
+        if (this.isDownload)
             chromePrefs.put("download.default_directory", this.downloadDir);
 
 //        if (AppProperties.getInstance().getPropertyAsBoolean("file.download.pdf"))
