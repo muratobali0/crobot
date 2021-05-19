@@ -181,7 +181,7 @@ public class CrobotGUI extends JFrame {
     }
 
     /**
-     * Stops to gettting documents.
+     * Stops to getting documents.
      */
     private void stopProcess() {
         if (getDocumentsTask != null) {
@@ -315,7 +315,7 @@ public class CrobotGUI extends JFrame {
                 }
             });
             popup.add(defaultItem);
-            trayIcon = new TrayIcon(image, "DataHunter", popup);
+            trayIcon = new TrayIcon(image, "Crobot", popup);
             trayIcon.setImageAutoSize(true);
         } else {
             log.error("System tray is not supported");
