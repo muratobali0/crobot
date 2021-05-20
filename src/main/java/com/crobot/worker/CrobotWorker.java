@@ -15,6 +15,7 @@ import com.crobot.page.DefinitionType;
 import com.crobot.page.SettingPoolStatus;
 import com.crobot.util.AppProperties;
 import com.crobot.util.PatternUtil;
+import com.crobot.util.RandomUtil;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -333,7 +334,7 @@ public class CrobotWorker {
 
                     try {
                         sonrakiEvrakLink.click();
-                        TimeUnit.SECONDS.sleep(5);
+                        TimeUnit.SECONDS.sleep(RandomUtil.getRandomInteger(7, 15));
                     } catch (Exception e) {
                         break;
                     }
