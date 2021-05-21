@@ -3,10 +3,7 @@ package com.crobot.worker;
 import com.crobot.dto.DocumentDTO;
 import com.crobot.dto.SettingDTO;
 import com.crobot.dto.SettingPoolDTO;
-import com.crobot.exception.CaptchaException;
-import com.crobot.exception.NoResultException;
-import com.crobot.exception.TooManyPagesException;
-import com.crobot.exception.ValidationException;
+import com.crobot.exception.*;
 import com.crobot.http.CaptchaRequestDTO;
 import com.crobot.http.CaptchaResponseDTO;
 import com.crobot.http.HttpClientUtil;
@@ -154,14 +151,25 @@ public class CrobotWorker {
                     driver.get(settingDTO.getWebPageUrl());
                 } catch (NoResultException e) {
                     log.error("ERROR SL008 - No Result Exception");
-                    log.error("ERROR SL008 Details - Daire: " + daire + ", Selection: " + selection + ", firstRun: " + firstRun +", Verdict Year: "+verdictYear+ ", currentNumber: " + currentNumber);
+                    log.error("ERROR SL008 Details - Daire: " + daire + ", Selection: " + selection + ", firstRun: " + firstRun + ", Verdict Year: " + verdictYear + ", currentNumber: " + currentNumber);
                     preDaire = daire;
                     preSelection = selection;
                     firstRun = false;
                     resolveCaptcha = false;
                     currentNumber = currentNumber + recordSize;
+                } catch (DialogCloseException e) {
+                    log.error("ERROR SL009 - Dialog Close Exception", e);
+                    TimeUnit.SECONDS.sleep(3);
+                    log.info("Getting new driver..");
+                    preDaire = "";
+                    preSelection = -1;
+                    firstRun = true;
+                    resolveCaptcha = true;
+                    driver = getNewDriver();
+                    driver.get(settingDTO.getWebPageUrl());
+                    currentNumber = currentNumber + recordSize;
                 } catch (Exception e) {
-                    log.error("ERROR SL009 - Exception", e);
+                    log.error("ERROR SL010 - Exception", e);
                     currentNumber = currentNumber + recordSize;
                 }
             }
@@ -317,15 +325,21 @@ public class CrobotWorker {
                         sonrakiEvrakLink = null;
 
                         List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
+                        log.debug("DEBUG SP004 - Got all close buttons.. Close Buttons: " + dialogCloseButtons.size());
+
                         for (WebElement closeButton : dialogCloseButtons) {
                             try {
-                                closeButton.click();
-                            } catch (Exception e1) {
-                                log.error("ERROR-SP004 Error with dialog close button");
-                                log.error("ERROR-SP004 Error Detail", e1);
+                                if (closeButton.isDisplayed() && closeButton.isEnabled()) {
+                                    log.debug("DEBUG SP005 - Clicking close button: " + closeButton.getText());
+                                    closeButton.click();
+                                    break;
+                                }
+                            } catch (Exception ex) {
+                                log.error("ERROR SP006 - Error while closing dialog window!", ex);
                                 //do nothing..
                             }
                         }
+
                     }
 
                     if (sonrakiEvrakLink == null || sonrakiEvrakLink.getAttribute("class").contains("disabled")) {
@@ -334,7 +348,9 @@ public class CrobotWorker {
 
                     try {
                         sonrakiEvrakLink.click();
-                        TimeUnit.SECONDS.sleep(RandomUtil.getRandomInteger(7, 15));
+                        int waitTime = RandomUtil.getRandomInteger(20, 10);
+                        log.debug("Waiting " + waitTime + " seconds to click <Next> link.");
+                        TimeUnit.SECONDS.sleep(waitTime);
                     } catch (Exception e) {
                         break;
                     }
@@ -376,19 +392,19 @@ public class CrobotWorker {
                 sendDocument(documentDTO);
             }
 
-            log.debug("DEBUG SP001 - Out of loop. Looking for dialog close icon..");
+            log.debug("DEBUG SP007 - Out of loop. Looking for dialog close icon..");
             List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
-            log.debug("DEBUG SP002 - Got all close buttons.. Close Buttons: " + dialogCloseButtons.size());
+            log.debug("DEBUG SP008 - Got all close buttons.. Close Buttons: " + dialogCloseButtons.size());
 
-            for (WebElement closeButton : dialogCloseButtons) {
+             for (WebElement closeButton : dialogCloseButtons) {
                 try {
-                    if(closeButton.isDisplayed() && closeButton.isEnabled()){
-                        log.debug("DEBUG SP003 - Clicking close button: "+closeButton.getText());
+                    if (closeButton.isDisplayed() && closeButton.isEnabled()) {
+                        log.debug("DEBUG SP009 - Clicking close button: " + closeButton.getText());
                         closeButton.click();
                         break;
                     }
                 } catch (Exception e) {
-                    log.error("ERROR SP001 - Error while closing dialog window!", e);
+                    log.error("ERROR SP010 - Error while closing dialog window!", e);
                     //do nothing..
                 }
             }
@@ -518,7 +534,7 @@ public class CrobotWorker {
             } else {
                 log.error("Captcha response result is null!!");
             }
-            log.debug("Captcha result: " + captchaResponseDTO.getResult());
+            //log.debug("Captcha result: " + captchaResponseDTO.getResult());
         } else {
             log.error("Error while calling captcha service.");
             if (responseContent != null) {
