@@ -48,6 +48,9 @@ public class CrobotWorker {
     private boolean isDownload;
     private String saveTxtDir;
     private boolean isSaveTxt;
+    private String captchaServiceUrl;
+    private String captchaServiceUser;
+    private String captchaServiceApiKey;
 
     public CrobotWorker(String serverUrl, String userName, String password, String downloadDir, boolean isDownload, String saveTxtDir, boolean isSaveTxt) {
         this.serverUrl = serverUrl;
@@ -99,6 +102,23 @@ public class CrobotWorker {
             return;
         }
 
+        if(AppProperties.getInstance().getPropertyAsBoolean("captcha.service.useServerSettings")){
+            if(settingDTO.getCaptchaServiceUrl() ==null
+                    ||settingDTO.getCaptchaServiceUserid()==null
+                    ||settingDTO.getCaptchaServiceApikey()==null){
+                log.error("ERROR SL002 Could not found captcha api settings..");
+                return;
+            }else{
+                this.captchaServiceUrl = settingDTO.getCaptchaServiceUrl();
+                this.captchaServiceUser = settingDTO.getCaptchaServiceUserid();
+                this.captchaServiceApiKey = settingDTO.getCaptchaServiceApikey();
+            }
+        }else{
+            this.captchaServiceUrl = AppProperties.getInstance().getProperty("captcha.service.url");
+            this.captchaServiceUser = AppProperties.getInstance().getProperty("captcha.service.userid");
+            this.captchaServiceApiKey = AppProperties.getInstance().getProperty("captcha.service.apikey");
+        }
+
         this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
         driver.get(settingDTO.getWebPageUrl());
         TimeUnit.SECONDS.sleep(5);
@@ -107,7 +127,7 @@ public class CrobotWorker {
         for (int i = 0; i < 10000; i++) {
             SettingPoolDTO settingPoolDTO = fetchOneFromPool();
             if (settingPoolDTO == null) {
-                log.error("ERROR SL002 There no SettingPool record!");
+                log.error("ERROR SL003 There no SettingPool record!");
                 return;
             }
 
@@ -131,16 +151,16 @@ public class CrobotWorker {
                     resolveCaptcha = false;
                     currentNumber = currentNumber + recordSize;
                 } catch (CaptchaException e) {
-                    log.error("ERROR SL003 - Captcha error. Renewing request..");
+                    log.error("ERROR SL004 - Captcha error. Renewing request..");
                     resolveCaptcha = true;
                 } catch (ValidationException e) {
-                    log.error("ERROR SL004 - Form validation error. Renewing request..");
+                    log.error("ERROR SL005 - Form validation error. Renewing request..");
                 } catch (TooManyPagesException e) {
-                    log.error("ERROR SL005 - Too many pages error. Renewing request..");
+                    log.error("ERROR SL006 - Too many pages error. Renewing request..");
                 } catch (ElementClickInterceptedException e) {
-                    log.error("ERROR SL006 - Too many pages error. Renewing request..", e);
+                    log.error("ERROR SL007 - Too many pages error. Renewing request..", e);
                 } catch (ConnectException | WebDriverException e) {
-                    log.error("ERROR SL007 - ConnectException | WebDriverException", e);
+                    log.error("ERROR SL008 - ConnectException | WebDriverException", e);
                     TimeUnit.SECONDS.sleep(3);
                     log.info("Getting new driver..");
                     preDaire = "";
@@ -150,15 +170,15 @@ public class CrobotWorker {
                     driver = getNewDriver();
                     driver.get(settingDTO.getWebPageUrl());
                 } catch (NoResultException e) {
-                    log.error("ERROR SL008 - No Result Exception");
-                    log.error("ERROR SL008 Details - Daire: " + daire + ", Selection: " + selection + ", firstRun: " + firstRun + ", Verdict Year: " + verdictYear + ", currentNumber: " + currentNumber);
+                    log.error("ERROR SL009 - No Result Exception");
+                    log.error("ERROR SL009 Details - Daire: " + daire + ", Selection: " + selection + ", firstRun: " + firstRun + ", Verdict Year: " + verdictYear + ", currentNumber: " + currentNumber);
                     preDaire = daire;
                     preSelection = selection;
                     firstRun = false;
                     resolveCaptcha = false;
                     currentNumber = currentNumber + recordSize;
                 } catch (DialogCloseException e) {
-                    log.error("ERROR SL009 - Dialog Close Exception", e);
+                    log.error("ERROR SL010 - Dialog Close Exception", e);
                     TimeUnit.SECONDS.sleep(3);
                     log.info("Getting new driver..");
                     preDaire = "";
@@ -169,7 +189,7 @@ public class CrobotWorker {
                     driver.get(settingDTO.getWebPageUrl());
                     currentNumber = currentNumber + recordSize;
                 } catch (Exception e) {
-                    log.error("ERROR SL010 - Exception", e);
+                    log.error("ERROR SL011 - Exception", e);
                     currentNumber = currentNumber + recordSize;
                 }
             }
@@ -508,14 +528,14 @@ public class CrobotWorker {
      */
     private String solveCaptcha(String path) throws InterruptedException, IOException {
         String result = null;
-        String server_url = AppProperties.getInstance().getProperty("captcha.service.url");
+        String server_url = this.captchaServiceUrl; //AppProperties.getInstance().getProperty("captcha.service.url");
         byte[] fileContent = FileUtils.readFileToByteArray(new File(path));
         String encodedImgData = Base64.getEncoder().encodeToString(fileContent);
         String data = encodedImgData.replace("data:image/png;base64,", "");
 
         CaptchaRequestDTO captchaRequestDTO = new CaptchaRequestDTO();
-        captchaRequestDTO.setUserid(AppProperties.getInstance().getProperty("captcha.service.userid"));
-        captchaRequestDTO.setApikey(AppProperties.getInstance().getProperty("captcha.service.apikey"));
+        captchaRequestDTO.setUserid(this.captchaServiceUser);
+        captchaRequestDTO.setApikey(this.captchaServiceApiKey);
         captchaRequestDTO.setData(data);
 
         Gson gson = new Gson();
