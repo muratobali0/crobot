@@ -20,4 +20,6 @@ public class SettingDTO implements Serializable {
 
     private Integer fairDuration;
 
+    private Integer fairDurationNight;
+
 }

@@ -11,6 +11,7 @@ import com.crobot.http.ResponseContent;
 import com.crobot.page.DefinitionType;
 import com.crobot.page.SettingPoolStatus;
 import com.crobot.util.AppProperties;
+import com.crobot.util.DateUtil;
 import com.crobot.util.PatternUtil;
 import com.crobot.util.RandomUtil;
 import com.google.gson.Gson;
@@ -28,6 +29,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.ConnectException;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -120,6 +122,9 @@ public class CrobotWorker {
         }
 
         this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
+        if(DateUtil.isNight())
+            this.fairDuration = settingDTO.getFairDurationNight() != null ? settingDTO.getFairDurationNight() : 20;
+
         driver.get(settingDTO.getWebPageUrl());
         TimeUnit.SECONDS.sleep(5);
 

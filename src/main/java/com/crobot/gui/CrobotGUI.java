@@ -86,8 +86,7 @@ public class CrobotGUI extends JFrame {
         textAreaStatus.append("Welcome to Crobot.");
         //setExtendedState(Frame.ICONIFIED);
         setFrameIcon();
-
-
+        autoStartWorker();
     }
 
     private void autoStartWorker() {
