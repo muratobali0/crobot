@@ -19,7 +19,7 @@ public final class RandomUtil {
      * @param minimum
      * @return
      */
-    public static int getRandomInteger(int maximum, int minimum) {
+    public static int getRandomInteger(int minimum, int maximum) {
         return ((int) (Math.random() * (maximum - minimum))) + minimum;
     }
 

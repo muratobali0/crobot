@@ -2,6 +2,7 @@ package com.crobot.gui;
 
 import com.crobot.http.HttpClientUtil;
 import com.crobot.http.ResponseContent;
+import com.crobot.util.AppProperties;
 import com.crobot.util.PatternUtil;
 import com.crobot.worker.CrobotWorker;
 import com.jgoodies.forms.layout.CellConstraints;
@@ -24,6 +25,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -82,11 +84,28 @@ public class CrobotGUI extends JFrame {
         initCloseOperation();
         initActions();
         textAreaStatus.append("Welcome to Crobot.");
-
         //setExtendedState(Frame.ICONIFIED);
         setFrameIcon();
 
 
+    }
+
+    private void autoStartWorker() {
+        boolean autostart = AppProperties.getInstance().getPropertyAsBoolean("crobot.worker.auto.start");
+        if (autostart) {
+            int waitDuration = AppProperties.getInstance().getPropertyAsInt("crobot.worker.auto.after");
+            try {
+                TimeUnit.SECONDS.sleep(waitDuration);
+            } catch (InterruptedException e) {
+                log.error("Auto start wait error", e);
+            }
+
+            textFieldServerAddress.setText(AppProperties.getInstance().getProperty("cserver.connection.address"));
+            textFieldUsername.setText(AppProperties.getInstance().getProperty("cserver.connection.username"));
+            passwordFieldPassword.setText(AppProperties.getInstance().getProperty("cserver.connection.password"));
+
+            startProcess();
+        }
     }
 
     /**

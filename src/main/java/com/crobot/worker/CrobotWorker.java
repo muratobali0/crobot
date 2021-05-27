@@ -102,18 +102,18 @@ public class CrobotWorker {
             return;
         }
 
-        if(AppProperties.getInstance().getPropertyAsBoolean("captcha.service.useServerSettings")){
-            if(settingDTO.getCaptchaServiceUrl() ==null
-                    ||settingDTO.getCaptchaServiceUserid()==null
-                    ||settingDTO.getCaptchaServiceApikey()==null){
+        if (AppProperties.getInstance().getPropertyAsBoolean("captcha.service.useServerSettings")) {
+            if (settingDTO.getCaptchaServiceUrl() == null
+                    || settingDTO.getCaptchaServiceUserid() == null
+                    || settingDTO.getCaptchaServiceApikey() == null) {
                 log.error("ERROR SL002 Could not found captcha api settings..");
                 return;
-            }else{
+            } else {
                 this.captchaServiceUrl = settingDTO.getCaptchaServiceUrl();
                 this.captchaServiceUser = settingDTO.getCaptchaServiceUserid();
                 this.captchaServiceApiKey = settingDTO.getCaptchaServiceApikey();
             }
-        }else{
+        } else {
             this.captchaServiceUrl = AppProperties.getInstance().getProperty("captcha.service.url");
             this.captchaServiceUser = AppProperties.getInstance().getProperty("captcha.service.userid");
             this.captchaServiceApiKey = AppProperties.getInstance().getProperty("captcha.service.apikey");
@@ -332,7 +332,7 @@ public class CrobotWorker {
 
             WebElement button = sonucButtonList.get(0);
             button.click();
-            TimeUnit.SECONDS.sleep(3);
+            TimeUnit.SECONDS.sleep(4);
 
             for (int i = 0; i < maxDocumentCount; i++) {
                 if (i != 0) {
@@ -368,7 +368,7 @@ public class CrobotWorker {
 
                     try {
                         sonrakiEvrakLink.click();
-                        int waitTime = RandomUtil.getRandomInteger(20, 10);
+                        int waitTime = RandomUtil.getRandomInteger(Math.max(10, fairDuration), Math.max(20, 20 + fairDuration));
                         log.debug("Waiting " + waitTime + " seconds to click <Next> link.");
                         TimeUnit.SECONDS.sleep(waitTime);
                     } catch (Exception e) {
@@ -416,7 +416,7 @@ public class CrobotWorker {
             List<WebElement> dialogCloseButtons = driver.findElements(By.className("ui-dialog-titlebar-close"));
             log.debug("DEBUG SP008 - Got all close buttons.. Close Buttons: " + dialogCloseButtons.size());
 
-             for (WebElement closeButton : dialogCloseButtons) {
+            for (WebElement closeButton : dialogCloseButtons) {
                 try {
                     if (closeButton.isDisplayed() && closeButton.isEnabled()) {
                         log.debug("DEBUG SP009 - Clicking close button: " + closeButton.getText());
@@ -667,6 +667,7 @@ public class CrobotWorker {
         System.setProperty("webdriver.chrome.driver", AppProperties.getInstance().getProperty("webdriver.chrome.driver"));
 
         ChromeOptions chromeOptions = new ChromeOptions();
+        //chromeOptions.addArguments("--headless");
         chromeOptions.addArguments("--disable-notifications");
         HashMap<String, Object> chromePrefs = new HashMap<>();
         chromePrefs.put("profile.default_content_settings.popups", 0);
