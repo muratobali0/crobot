@@ -29,7 +29,6 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.ConnectException;
-import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -122,14 +121,14 @@ public class CrobotWorker {
         }
 
         this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
-        if(DateUtil.isNight())
+        if (DateUtil.isNight())
             this.fairDuration = settingDTO.getFairDurationNight() != null ? settingDTO.getFairDurationNight() : 20;
 
         driver.get(settingDTO.getWebPageUrl());
         TimeUnit.SECONDS.sleep(5);
 
         //TODO: NEED CONTROLLED INFINITE LOOP
-        for (int i = 0; i < 10000; i++) {
+        for (int i = 0; i < 1000000; i++) {
             SettingPoolDTO settingPoolDTO = fetchOneFromPool();
             if (settingPoolDTO == null) {
                 log.error("ERROR SL003 There no SettingPool record!");
@@ -331,8 +330,15 @@ public class CrobotWorker {
         List<WebElement> sonucButtonList = driver.findElements(By.cssSelector("button[id$='rowbtn']"));
         if (!sonucButtonList.isEmpty()) {
 
+            int maxPageNumber = 3;
+            try {
+                maxPageNumber = (int) Math.ceil((double) (Integer.parseInt(endNumber) - Integer.parseInt(startNumber)) / 15) + 1;
+            } catch (Exception e) {
+                maxPageNumber = 3;
+            }
+
             List<WebElement> pageNumbers = driver.findElements(By.className("ui-paginator-page"));
-            if (pageNumbers.size() > 4)
+            if (pageNumbers.size() > maxPageNumber)
                 throw new TooManyPagesException();
 
             WebElement button = sonucButtonList.get(0);
@@ -669,6 +675,7 @@ public class CrobotWorker {
      * @return
      */
     private WebDriver getNewDriver() {
+        log.debug("Looking for Chrome dirver..");
         System.setProperty("webdriver.chrome.driver", AppProperties.getInstance().getProperty("webdriver.chrome.driver"));
 
         ChromeOptions chromeOptions = new ChromeOptions();
