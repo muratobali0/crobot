@@ -120,15 +120,15 @@ public class CrobotWorker {
             this.captchaServiceApiKey = AppProperties.getInstance().getProperty("captcha.service.apikey");
         }
 
-        this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
-        if (DateUtil.isNight())
-            this.fairDuration = settingDTO.getFairDurationNight() != null ? settingDTO.getFairDurationNight() : 20;
-
         driver.get(settingDTO.getWebPageUrl());
         TimeUnit.SECONDS.sleep(5);
 
         //TODO: NEED CONTROLLED INFINITE LOOP
         for (int i = 0; i < 1000000; i++) {
+            this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
+            if (DateUtil.isNight())
+                this.fairDuration = settingDTO.getFairDurationNight() != null ? settingDTO.getFairDurationNight() : 20;
+
             SettingPoolDTO settingPoolDTO = fetchOneFromPool();
             if (settingPoolDTO == null) {
                 log.error("ERROR SL003 There no SettingPool record!");
