@@ -124,7 +124,7 @@ public class CrobotWorker {
         TimeUnit.SECONDS.sleep(5);
 
         //TODO: NEED CONTROLLED INFINITE LOOP
-        for (int i = 0; i < 1000000; i++) {
+        for (int i = 0; i < 1000000000; i++) {
             this.fairDuration = settingDTO.getFairDuration() != null ? settingDTO.getFairDuration() : 20;
             if (DateUtil.isNight())
                 this.fairDuration = settingDTO.getFairDurationNight() != null ? settingDTO.getFairDurationNight() : 20;

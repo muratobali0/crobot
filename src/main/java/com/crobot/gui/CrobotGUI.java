@@ -3,7 +3,6 @@ package com.crobot.gui;
 import com.crobot.http.HttpClientUtil;
 import com.crobot.http.ResponseContent;
 import com.crobot.util.AppProperties;
-import com.crobot.util.PatternUtil;
 import com.crobot.worker.CrobotWorker;
 import com.jgoodies.forms.layout.CellConstraints;
 import com.jgoodies.forms.layout.FormLayout;
@@ -23,11 +22,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.concurrent.*;
 
 @Slf4j
 public class CrobotGUI extends JFrame {
@@ -70,6 +65,7 @@ public class CrobotGUI extends JFrame {
     private String saveTxtDir;
     private boolean isSaveTxt;
     private GetDocumentsTask getDocumentsTask;
+    private CheckDocumentsTask checkDocumentsTask;
 
     /**
      * Constructor for CrobotGUI
@@ -104,6 +100,7 @@ public class CrobotGUI extends JFrame {
             passwordFieldPassword.setText(AppProperties.getInstance().getProperty("cserver.connection.password"));
 
             startProcess();
+            (checkDocumentsTask = new CheckDocumentsTask()).execute();
         }
     }
 
@@ -546,6 +543,40 @@ public class CrobotGUI extends JFrame {
             labelWorking.setIcon(new ImageIcon(getClass().getResource("/icons/blocks.png")));
             textAreaStatus.append("\nProcess finished!");
             log.debug("GetDocumentsTask finished.");
+            getDocumentsTask = null;
+        }
+    }
+
+
+    /**
+     * Starts to getting documents.
+     */
+    private class CheckDocumentsTask extends SwingWorker<Void, Void> {
+        @Override
+        protected Void doInBackground() {
+            try {
+                while (true) {
+                    TimeUnit.MINUTES.sleep(10);
+                    log.debug("Checking GetDocument Task ..");
+                    if (getDocumentsTask == null) {
+                        log.debug("GetDocumentTask is not running. Starting ..");
+                        startProcess();
+                    } else {
+                        log.debug("GetDocumentTask is running.");
+                    }
+                }
+
+            } catch (InterruptedException e) {
+                textAreaStatus.append("\nError while starting the process! Please check logs.");
+                log.error(e.getMessage());
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        @Override
+        public void done() {
+            log.debug("CheckDocumentsTask finished.");
         }
     }
 
